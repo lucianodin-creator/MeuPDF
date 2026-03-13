@@ -22,31 +22,34 @@ function applySignature() {
     if(pad.isEmpty()) return;
     document.getElementById('sig-preview').src = pad.toDataURL();
     draggable.style.display = 'block';
-    // Posiciona inicialmente no topo para evitar que suma
-    draggable.style.transform = 'translate3d(0, 0, 0)';
+    // Começa no topo do PDF para facilitar o início do arraste
+    draggable.style.left = "0px";
+    draggable.style.top = "0px";
+    draggable.style.transform = "none"; 
     sigModal.style.display = 'none';
 }
 
-// CORREÇÃO DO ARRASTE (TOUCH)
+// ARRASTE ULTRA-PRECISO PARA CELULAR
 draggable.addEventListener("touchmove", (e) => {
-    e.preventDefault();
+    e.preventDefault(); // Impede a tela de rolar junto
     const touch = e.touches[0];
     const wrapper = document.getElementById('pdf-wrapper');
     const rect = wrapper.getBoundingClientRect();
-    
-    // Calculamos a posição exata onde o dedo está EM RELAÇÃO ao PDF
-    // Subtraímos a posição do scroll para evitar que a assinatura "fuja"
-    let x = touch.clientX - rect.left - (draggable.offsetWidth / 2);
-    let y = touch.clientY - rect.top - (draggable.offsetHeight / 2);
 
-    // Limites para não sair da folha
+    // Calcula a posição ignorando o scroll da página (PageX/Y)
+    // Centraliza o quadro no seu dedo
+    let x = touch.pageX - (rect.left + window.scrollX) - (draggable.offsetWidth / 2);
+    let y = touch.pageY - (rect.top + window.scrollY) - (draggable.offsetHeight / 2);
+
+    // Trava para não sair das bordas da folha
     x = Math.max(0, Math.min(x, rect.width - draggable.offsetWidth));
     y = Math.max(0, Math.min(y, rect.height - draggable.offsetHeight));
 
-    // Aplica o movimento suave
-    draggable.style.transform = `translate3d(${x}px, ${y}px, 0)`;
+    // Move a janela fisicamente
+    draggable.style.left = x + "px";
+    draggable.style.top = y + "px";
 
-    // Guarda a percentagem correta para o salvamento final
+    // Guarda a posição para o PDF final (em porcentagem)
     pctX = (x + (draggable.offsetWidth / 2)) / rect.width;
     pctY = (y + (draggable.offsetHeight / 2)) / rect.height;
 }, { passive: false });
@@ -61,6 +64,7 @@ async function savePDF() {
     const sigW = 150; 
     const sigH = (sigImg.height / sigImg.width) * sigW;
 
+    // A mágica da inversão do eixo Y (conforme sua análise)
     page.drawImage(sigImg, {
         x: (width * pctX) - (sigW / 2),
         y: height - (height * pctY) - (sigH / 2),
@@ -72,7 +76,7 @@ async function savePDF() {
     const blob = new Blob([savedBytes], { type: 'application/pdf' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
-    link.download = "documento_assinado.pdf";
+    link.download = "contrato_assinado.pdf";
     link.click();
 }
 
