@@ -22,20 +22,33 @@ function applySignature() {
     if(pad.isEmpty()) return;
     document.getElementById('sig-preview').src = pad.toDataURL();
     draggable.style.display = 'block';
-    draggable.style.transform = 'translate3d(10px, 10px, 0)';
+    // Posiciona inicialmente no topo para evitar que suma
+    draggable.style.transform = 'translate3d(0, 0, 0)';
     sigModal.style.display = 'none';
 }
 
+// CORREÇÃO DO ARRASTE (TOUCH)
 draggable.addEventListener("touchmove", (e) => {
     e.preventDefault();
     const touch = e.touches[0];
     const wrapper = document.getElementById('pdf-wrapper');
     const rect = wrapper.getBoundingClientRect();
-    let x = touch.clientX - rect.left - 75; 
-    let y = touch.clientY - rect.top - 25;
+    
+    // Calculamos a posição exata onde o dedo está EM RELAÇÃO ao PDF
+    // Subtraímos a posição do scroll para evitar que a assinatura "fuja"
+    let x = touch.clientX - rect.left - (draggable.offsetWidth / 2);
+    let y = touch.clientY - rect.top - (draggable.offsetHeight / 2);
+
+    // Limites para não sair da folha
+    x = Math.max(0, Math.min(x, rect.width - draggable.offsetWidth));
+    y = Math.max(0, Math.min(y, rect.height - draggable.offsetHeight));
+
+    // Aplica o movimento suave
     draggable.style.transform = `translate3d(${x}px, ${y}px, 0)`;
-    pctX = (touch.clientX - rect.left) / rect.width;
-    pctY = (touch.clientY - rect.top) / rect.height;
+
+    // Guarda a percentagem correta para o salvamento final
+    pctX = (x + (draggable.offsetWidth / 2)) / rect.width;
+    pctY = (y + (draggable.offsetHeight / 2)) / rect.height;
 }, { passive: false });
 
 async function savePDF() {
@@ -44,6 +57,7 @@ async function savePDF() {
     const page = doc.getPages()[0];
     const { width, height } = page.getSize();
     const sigImg = await doc.embedPng(document.getElementById('sig-preview').src);
+
     const sigW = 150; 
     const sigH = (sigImg.height / sigImg.width) * sigW;
 
@@ -58,7 +72,7 @@ async function savePDF() {
     const blob = new Blob([savedBytes], { type: 'application/pdf' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
-    link.download = "contrato_assinado.pdf";
+    link.download = "documento_assinado.pdf";
     link.click();
 }
 
