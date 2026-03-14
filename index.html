@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>MeuPDF v2.3</title>
+    <title>MeuPDF v2.4</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.0.0/dist/signature_pad.umd.min.js"></script>
     <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
@@ -16,18 +16,19 @@
         #viewer { flex: 1; overflow-y: auto; background: #1a1a1a; padding: 15px; display: flex; flex-direction: column; align-items: center; position: relative; touch-action: pan-y; }
         .pdf-page-wrapper { position: relative; background: white; margin-bottom: 25px; line-height: 0; box-shadow: 0 5px 25px #000; }
         
-        #drag-box { position: absolute; width: 140px; height: 60px; border: 2px dashed #007bff; background: rgba(0,123,255,0.1); display: none; z-index: 50; touch-action: none; }
-        #sig-img { width: 100%; height: 100%; pointer-events: none; object-fit: contain; }
+        /* CAIXA DE ASSINATURA COM CONTROLE DE TAMANHO */
+        #drag-box { position: absolute; width: 150px; height: 70px; border: 2px dashed #007bff; background: rgba(0,123,255,0.1); display: none; z-index: 50; touch-action: none; }
+        #sig-img-drag { width: 100%; height: 100%; pointer-events: none; object-fit: contain; }
+        .resizer { position: absolute; bottom: -10px; right: -10px; width: 30px; height: 30px; background: #007bff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 20px; color: white; border: 2px solid #fff; }
 
         #modal { display: none; position: fixed; inset: 0; background: #000; z-index: 2000; flex-direction: column; align-items: center; justify-content: center; }
-        #canvas-wrap { background: white; width: 95vw; height: 65vh; position: relative; border: 2px solid #555; }
+        #canvas-wrap { background: white; width: 95vw; height: 70vh; position: relative; border: 2px solid #555; }
         #sig-canvas { width: 100%; height: 100%; touch-action: none; }
         
-        .controls { position: fixed; bottom: 15px; left: 50%; transform: translateX(-50%); display: flex; gap: 8px; z-index: 150; display: none; background: rgba(0,0,0,0.85); padding: 12px; border-radius: 12px; border: 1px solid #444; }
+        .controls { position: fixed; bottom: 15px; left: 50%; transform: translateX(-50%); display: flex; gap: 8px; z-index: 150; display: none; background: rgba(0,0,0,0.9); padding: 12px; border-radius: 12px; border: 1px solid #444; }
         
-        /* OVERLAY DE PRÉVIA MELHORADO */
-        #preview-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.95); z-index: 3000; flex-direction: column; align-items: center; justify-content: center; padding: 10px; }
-        #preview-img-container { background: white; width: 95%; height: 75%; overflow-y: auto; display: flex; justify-content: center; border-radius: 4px; }
+        #preview-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.98); z-index: 3000; flex-direction: column; align-items: center; justify-content: center; padding: 10px; }
+        #preview-img-container { background: white; width: 95%; height: 75%; overflow-y: auto; display: flex; justify-content: center; border-radius: 4px; border: 1px solid #fff; }
         #preview-img-container img { max-width: 100%; height: auto; align-self: flex-start; }
     </style>
 </head>
@@ -39,29 +40,32 @@
     </header>
 
     <div id="viewer"></div>
-    <div id="drag-box"><img id="sig-img-drag"></div>
+    <div id="drag-box">
+        <img id="sig-img-drag">
+        <div class="resizer" id="resize-handle">⤢</div>
+    </div>
 
     <div class="controls" id="action-btns">
-        <button class="btn" style="background:#28a745" onclick="generatePreview(true)">REVISAR TODAS</button>
-        <button class="btn" style="background:#007bff" onclick="generatePreview(false)">REVISAR SÓ ESTA</button>
+        <button class="btn" style="background:#28a745" onclick="generatePreview(true)">GERAR TODAS</button>
+        <button class="btn" style="background:#007bff" onclick="generatePreview(false)">GERAR SÓ ESTA</button>
     </div>
 
     <div id="modal">
-        <div style="margin-bottom:10px; color:#f39c12; font-weight:bold;">ASSINE NO QUADRO ABAIXO</div>
+        <div style="margin-bottom:10px; color:#f39c12; font-weight:bold;">ASSINE NO QUADRO ABAIXO (DEITADO)</div>
         <div id="canvas-wrap"><canvas id="sig-canvas"></canvas></div>
         <div style="margin-top:15px; display:flex; gap:12px;">
             <button class="btn" style="background:#28a745; width:100px;" onclick="confirmSig()">OK</button>
             <button class="btn" style="background:#dc3545" onclick="pad.clear()">LIMPAR</button>
-            <button class="btn" style="background:#6c757d" onclick="closeModal()">VOLTAR</button>
+            <button class="btn" style="background:#6c757d" onclick="closeModal()">SAIR</button>
         </div>
     </div>
 
     <div id="preview-overlay">
-        <h3 style="margin: 10px 0; font-size: 16px;">VERIFIQUE COMO FICOU:</h3>
+        <h3 style="margin: 10px 0; color:#fff;">CONFIRME O RESULTADO:</h3>
         <div id="preview-img-container"><img id="preview-img-final"></div>
-        <div style="margin-top:15px; display:flex; gap:10px; width: 100%; justify-content: center;">
-            <button class="btn" style="background:#28a745; flex: 1;" id="download-final">CONFIRMAR E BAIXAR</button>
-            <button class="btn" style="background:#dc3545; flex: 1;" onclick="closePreview()">REFAZER</button>
+        <div style="margin-top:15px; display:flex; gap:10px; width: 100%;">
+            <button class="btn" style="background:#28a745; flex: 1;" id="download-final">ESTÁ ÓTIMO, BAIXAR!</button>
+            <button class="btn" style="background:#dc3545; flex: 1;" onclick="closePreview()">REFAZER POSIÇÃO</button>
         </div>
     </div>
 
@@ -88,10 +92,6 @@
             pad = new SignaturePad(c);
         }
 
-        window.addEventListener('orientationchange', () => {
-            if(document.getElementById('modal').style.display === 'flex') setTimeout(resizeCanvas, 300);
-        });
-
         function closeModal() { document.getElementById('modal').style.display = 'none'; }
         function closePreview() { document.getElementById('preview-overlay').style.display = 'none'; }
 
@@ -105,11 +105,26 @@
             closeModal();
         }
 
+        // ARRASTAR
         box.addEventListener("touchmove", (e) => {
+            if (e.target.id === 'resize-handle') return;
             const r = box.parentElement.getBoundingClientRect();
             const t = e.touches[0];
-            box.style.left = (t.clientX - r.left - 70) + "px";
-            box.style.top = (t.clientY - r.top - 30) + "px";
+            box.style.left = (t.clientX - r.left - (box.offsetWidth/2)) + "px";
+            box.style.top = (t.clientY - r.top - (box.offsetHeight/2)) + "px";
+        });
+
+        // REDIMENSIONAR (Botão azul no canto da assinatura)
+        document.getElementById('resize-handle').addEventListener("touchmove", (e) => {
+            e.stopPropagation();
+            const t = e.touches[0];
+            const r = box.getBoundingClientRect();
+            const newW = t.clientX - r.left;
+            const newH = newW * 0.46; // Mantém a proporção
+            if (newW > 50 && newW < 300) {
+                box.style.width = newW + "px";
+                box.style.height = newH + "px";
+            }
         });
 
         document.getElementById('pdf-in').onchange = async (e) => {
@@ -121,7 +136,7 @@
                 const p = await pdf.getPage(i);
                 const w = document.createElement('div'); w.className = 'pdf-page-wrapper';
                 const c = document.createElement('canvas');
-                const vp = p.getViewport({scale: (view.clientWidth * 0.92) / p.getViewport({scale:1}).width});
+                const vp = p.getViewport({scale: (view.clientWidth * 0.95) / p.getViewport({scale:1}).width});
                 c.width = vp.width; c.height = vp.height;
                 await p.render({canvasContext: c.getContext('2d'), viewport: vp}).promise;
                 w.appendChild(c); view.appendChild(w);
@@ -151,14 +166,11 @@
             });
 
             currentPdfBytes = await doc.save();
-            
-            // GERAR IMAGEM PARA PRÉVIA (Evita bloqueio de PDF no celular)
             const previewPdf = await pdfjsLib.getDocument({data: currentPdfBytes}).promise;
             const firstPage = await previewPdf.getPage(1);
             const canvasPreview = document.createElement('canvas');
-            const viewport = firstPage.getViewport({scale: 1.5});
-            canvasPreview.width = viewport.width;
-            canvasPreview.height = viewport.height;
+            const viewport = firstPage.getViewport({scale: 1.2});
+            canvasPreview.width = viewport.width; canvasPreview.height = viewport.height;
             await firstPage.render({canvasContext: canvasPreview.getContext('2d'), viewport: viewport}).promise;
             
             document.getElementById('preview-img-final').src = canvasPreview.toDataURL();
