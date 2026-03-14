@@ -1,101 +1,102 @@
 const { PDFDocument } = PDFLib;
+// Configuração vital do Worker
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
 
-let currentPdf, sp;
-const viewer = document.getElementById('viewer');
-const sigBox = document.getElementById('sig-box');
-const sigTag = document.getElementById('sig-tag');
-const sigRender = document.getElementById('sig-render');
+let pdfData, pad;
+const view = document.getElementById('main-view');
+const drag = document.getElementById('sig-drag');
+const res = document.getElementById('sig-res');
+const tag = document.getElementById('sig-tag');
 
-function openPad() {
-    if (!viewer.hasChildNodes()) return alert("Selecione um PDF primeiro.");
-    document.getElementById('modal-overlay').style.display = 'flex';
-    const canvas = document.getElementById('sig-canvas');
-    const dpr = window.devicePixelRatio || 1;
-    canvas.width = canvas.offsetWidth * dpr;
-    canvas.height = canvas.offsetHeight * dpr;
-    canvas.getContext("2d").scale(dpr, dpr);
-    sp = new SignaturePad(canvas, { penColor: 'black' });
+function showPad() {
+    if (!view.hasChildNodes()) return alert("Abra um PDF primeiro.");
+    document.getElementById('modal-sig').style.display = 'flex';
+    const c = document.getElementById('canv');
+    const ratio = window.devicePixelRatio || 1;
+    c.width = c.offsetWidth * ratio;
+    c.height = c.offsetHeight * ratio;
+    c.getContext("2d").scale(ratio, ratio);
+    pad = new SignaturePad(c);
 }
 
-function closePad() { document.getElementById('modal-overlay').style.display = 'none'; }
+function closePad() { document.getElementById('modal-sig').style.display = 'none'; }
 
-function confirmSig() {
-    if (sp.isEmpty()) return alert("Área em branco!");
-    sigRender.src = sp.toDataURL();
-    sigBox.style.display = 'block';
-    const page1 = viewer.querySelector('.page-container');
-    if (page1) {
-        page1.appendChild(sigBox);
-        sigBox.style.left = "50px";
-        sigBox.style.top = "50px";
+function applySig() {
+    if (pad.isEmpty()) return alert("Assine primeiro.");
+    res.src = pad.toDataURL();
+    drag.style.display = 'block';
+    const p1 = view.querySelector('.page-box');
+    if (p1) {
+        p1.appendChild(drag);
+        drag.style.left = "10px";
+        drag.style.top = "10px";
     }
     closePad();
 }
 
-sigTag.onclick = function(e) {
+tag.onclick = function(e) {
     e.stopPropagation();
-    const all = this.innerText.includes("TODAS");
-    this.innerText = all ? "PÁGINA: ÚNICA" : "PÁGINA: TODAS";
-    this.style.background = all ? "#ffc107" : "#28a745";
+    const isAll = this.innerText.includes("TODAS");
+    this.innerText = isAll ? "PÁGINA: ÚNICA" : "PÁGINA: TODAS";
+    this.style.background = isAll ? "#f39c12" : "#2ecc71";
 };
 
-sigBox.addEventListener("touchmove", (e) => {
+drag.addEventListener("touchmove", (e) => {
     e.preventDefault();
-    const parent = sigBox.parentElement;
-    const rect = parent.getBoundingClientRect();
-    const touch = e.touches[0];
-    sigBox.style.left = (touch.clientX - rect.left - 80) + "px";
-    sigBox.style.top = (touch.clientY - rect.top - 35) + "px";
+    const r = drag.parentElement.getBoundingClientRect();
+    const t = e.touches[0];
+    drag.style.left = (t.clientX - r.left - 75) + "px";
+    drag.style.top = (t.clientY - r.top - 30) + "px";
 }, { passive: false });
 
-document.getElementById('pdf-input').onchange = async (e) => {
+document.getElementById('pdf-file').onchange = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    currentPdf = await file.arrayBuffer();
-    const pdfDoc = await pdfjsLib.getDocument({data: currentPdf}).promise;
-    viewer.innerHTML = "";
-    for (let i = 1; i <= pdfDoc.numPages; i++) {
-        const page = await pdfDoc.getPage(i);
-        const div = document.createElement('div');
-        div.className = 'page-container';
-        const canvas = document.createElement('canvas');
-        const viewport = page.getViewport({scale: (viewer.clientWidth * 0.95) / page.getViewport({scale:1}).width});
-        canvas.width = viewport.width; canvas.height = viewport.height;
-        await page.render({canvasContext: canvas.getContext('2d'), viewport}).promise;
-        div.appendChild(canvas);
-        viewer.appendChild(div);
+    try {
+        pdfData = await file.arrayBuffer();
+        const loadingTask = pdfjsLib.getDocument({data: pdfData});
+        const pdf = await loadingTask.promise;
+        view.innerHTML = "";
+        for (let i = 1; i <= pdf.numPages; i++) {
+            const page = await pdf.getPage(i);
+            const div = document.createElement('div');
+            div.className = 'page-box';
+            const c = document.createElement('canvas');
+            const vp = page.getViewport({scale: (view.clientWidth * 0.9) / page.getViewport({scale:1}).width});
+            c.width = vp.width; c.height = vp.height;
+            await page.render({canvasContext: c.getContext('2d'), viewport: vp}).promise;
+            div.appendChild(c);
+            view.appendChild(div);
+        }
+    } catch (err) {
+        alert("Erro ao carregar PDF: " + err.message);
     }
 };
 
-async function saveFile() {
-    if(!currentPdf || !sigRender.src) return alert("Faltam dados para salvar.");
-    const doc = await PDFDocument.load(currentPdf);
-    const pngImg = await doc.embedPng(sigRender.src);
+async function savePdf() {
+    if (!pdfData || !res.src) return alert("Faltam dados.");
+    const doc = await PDFDocument.load(pdfData);
+    const img = await doc.embedPng(res.src);
     const pages = doc.getPages();
-    const container = viewer.querySelector('.page-container');
+    const p1 = view.querySelector('.page-box');
     
-    const xRel = parseFloat(sigBox.style.left) / container.offsetWidth;
-    const yRel = parseFloat(sigBox.style.top) / container.offsetHeight;
-    const wRel = sigBox.offsetWidth / container.offsetWidth;
-    const hRel = sigBox.offsetHeight / container.offsetHeight;
+    const rx = parseFloat(drag.style.left) / p1.offsetWidth;
+    const ry = parseFloat(drag.style.top) / p1.offsetHeight;
+    const rw = drag.offsetWidth / p1.offsetWidth;
+    const rh = drag.offsetHeight / p1.offsetHeight;
 
-    const allPages = sigTag.innerText.includes("TODAS");
-    const iterations = allPages ? pages.length : 1;
-
-    for (let i = 0; i < iterations; i++) {
+    const count = tag.innerText.includes("TODAS") ? pages.length : 1;
+    for (let i = 0; i < count; i++) {
         const p = pages[i];
         const { width, height } = p.getSize();
-        p.drawImage(pngImg, {
-            x: width * xRel, 
-            y: height - (height * yRel) - (height * hRel),
-            width: width * wRel, 
-            height: height * hRel
+        p.drawImage(img, {
+            x: width * rx, y: height - (height * ry) - (height * rh),
+            width: width * rw, height: height * rh
         });
     }
-    const bytes = await doc.save();
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(new Blob([bytes], {type: 'application/pdf'}));
-    link.download = "MeuPDF_Final.pdf";
-    link.click();
+    const b = await doc.save();
+    const l = document.createElement('a');
+    l.href = URL.createObjectURL(new Blob([b], {type: 'application/pdf'}));
+    l.download = "meupdf_final.pdf";
+    l.click();
 }
