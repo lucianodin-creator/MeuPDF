@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes, viewport-fit=cover">
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-    <title>MeuPDF v4.4</title>
+    <title>MeuPDF v4.5</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.0.0/dist/signature_pad.umd.min.js"></script>
     <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
@@ -12,23 +12,18 @@
         * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
         body { font-family: sans-serif; margin: 0; background: #000; color: #fff; height: 100vh; overflow: hidden; }
         #screen-pdf, #screen-sign { position: absolute; inset: 0; display: flex; flex-direction: column; }
-        #screen-sign { display: none; background: #333; z-index: 2000; overflow: auto; }
-
+        #screen-sign { display: none; background: #222; z-index: 2000; overflow: auto; }
         header { background: #1a1a1a; padding: 10px; display: flex; justify-content: center; gap: 10px; border-bottom: 2px solid #333; flex-shrink: 0; }
         .btn { padding: 12px 18px; border: none; border-radius: 6px; font-weight: bold; color: white; text-transform: uppercase; font-size: 11px; cursor: pointer; }
-        
         #viewer { flex: 1; overflow-y: auto; padding: 15px; background: #121212; display: flex; flex-direction: column; align-items: center; }
         .pdf-page-wrapper { position: relative; background: white; margin-bottom: 20px; box-shadow: 0 5px 15px #000; line-height: 0; }
-        
         .sig-box { position: absolute; width: 85px; height: 42px; border: 1.5px dashed #007bff; background: rgba(0,123,255,0.05); z-index: 50; touch-action: none; }
         .sig-box img { width: 100%; height: 100%; pointer-events: none; }
         .resizer { position: absolute; bottom: -8px; right: -8px; width: 22px; height: 22px; background: #007bff; border-radius: 50%; border: 2px solid #fff; }
-
         .sign-header { background: #f39c12; color: #000; padding: 10px; text-align: center; font-weight: bold; font-size: 12px; position: sticky; top: 0; z-index: 10; }
-        #canvas-container { flex: 1; display: flex; align-items: center; justify-content: center; padding: 50px 20px; min-height: 400px; }
-        #canvas-wrapper { background: #fff; width: 100%; max-width: 500px; aspect-ratio: 2.5 / 1; box-shadow: 0 10px 40px #000; position: relative; }
-        canvas#sig-canvas { width: 100%; height: 100%; display: block; touch-action: none; }
-        
+        #canvas-container { flex: 1; display: flex; align-items: center; justify-content: center; padding: 40px 20px; min-height: 450px; }
+        #canvas-wrapper { background: #fff; width: 100%; max-width: 500px; aspect-ratio: 2.5 / 1; position: relative; }
+        canvas#sig-canvas { width: 100%; height: 100%; display: block; touch-action: none; background: #fff; }
         .sign-footer { background: #1a1a1a; padding: 15px; display: flex; justify-content: center; gap: 15px; position: sticky; bottom: 0; z-index: 10; }
         .footer-tools { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); display: none; z-index: 100; }
     </style>
@@ -45,7 +40,7 @@
     </div>
 
     <div id="screen-sign">
-        <div class="sign-header">ALINHAMENTO DINÂMICO ATIVADO</div>
+        <div class="sign-header">SINCRONIA GEOMÉTRICA (v4.5)</div>
         <div id="canvas-container">
             <div id="canvas-wrapper">
                 <canvas id="sig-canvas"></canvas>
@@ -67,44 +62,43 @@
             if (!document.getElementById('viewer').hasChildNodes()) return alert("Abra o PDF!");
             document.getElementById('screen-pdf').style.display = 'none';
             document.getElementById('screen-sign').style.display = 'block';
-            setTimeout(initPad, 200);
+            setTimeout(initPad, 250);
         }
         function hideSignScreen() { document.getElementById('screen-sign').style.display = 'none'; document.getElementById('screen-pdf').style.display = 'flex'; }
 
         function initPad() {
             const c = document.getElementById('sig-canvas');
             const wrap = document.getElementById('canvas-wrapper');
-            const ratio = Math.max(window.devicePixelRatio || 1, 2);
+            const ratio = window.devicePixelRatio || 1;
             
             c.width = wrap.offsetWidth * ratio;
             c.height = wrap.offsetHeight * ratio;
             const ctx = c.getContext("2d");
-            ctx.scale(ratio, ratio);
+            ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
 
             if (pad) pad.off();
             
             pad = new SignaturePad(c, { 
                 penColor: "rgb(0, 40, 120)", 
-                minWidth: 0.5, 
-                maxWidth: 1.2,
+                minWidth: 0.6, 
+                maxWidth: 1.3,
                 velocityFilterWeight: 0.7
             });
 
-            // NOVA LÓGICA: Sincronização em tempo real de coordenadas
-            const originalHandler = pad._handlePointerEvents.bind(pad);
+            // CORREÇÃO DEFINITIVA: Mapeamento baseado em matriz real
             pad._handlePointerEvents = function(event) {
+                event.preventDefault();
                 const rect = c.getBoundingClientRect();
                 const clientX = event.clientX || (event.touches && event.touches[0].clientX);
                 const clientY = event.clientY || (event.touches && event.touches[0].clientY);
                 
-                // Calcula a posição proporcional exata, eliminando o erro que cresce para a direita
-                const x = (clientX - rect.left) * (c.width / rect.width / ratio);
-                const y = (clientY - rect.top) * (c.height / rect.height / ratio);
+                // Cálculo de normalização pura
+                const x = (clientX - rect.left) * (c.width / ratio / rect.width);
+                const y = (clientY - rect.top) * (c.height / ratio / rect.height);
                 
-                // Injeta as coordenadas corrigidas diretamente no motor do SignaturePad
                 const point = { x, y, time: Date.now() };
                 if (event.type.includes('start')) pad._strokeBegin(point);
-                else if (event.type.includes('move')) pad._strokeUpdate(point);
+                else if (event.type.includes('move')) { if (pad._mouseButtonDown) pad._strokeUpdate(point); }
                 else if (event.type.includes('end')) pad._strokeEnd(point);
             };
         }
@@ -172,7 +166,7 @@
             const bytes = await doc.save();
             const link = document.createElement('a');
             link.href = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
-            link.download = "Contrato_Assinado.pdf";
+            link.download = "Contrato_Final.pdf";
             link.click();
         }
     </script>
