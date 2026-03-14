@@ -3,29 +3,34 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>MeuPDF v2.1</title>
+    <title>MeuPDF v2.2</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.0.0/dist/signature_pad.umd.min.js"></script>
     <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
     <style>
         * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
         body { font-family: sans-serif; margin: 0; background: #000; color: #fff; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
-        header { background: #222; padding: 10px; display: flex; justify-content: center; gap: 8px; z-index: 100; border-bottom: 2px solid #333; }
+        header { background: #222; padding: 10px; display: flex; justify-content: center; gap: 8px; border-bottom: 2px solid #333; }
         .btn { padding: 12px 15px; border: none; border-radius: 4px; font-weight: bold; color: white; text-transform: uppercase; font-size: 11px; cursor: pointer; }
         
         #viewer { flex: 1; overflow-y: auto; background: #1a1a1a; padding: 15px; display: flex; flex-direction: column; align-items: center; position: relative; touch-action: pan-y; }
         .pdf-page-wrapper { position: relative; background: white; margin-bottom: 25px; line-height: 0; box-shadow: 0 5px 25px #000; }
-        canvas { display: block; max-width: 100%; height: auto; }
-
+        
         #drag-box { position: absolute; width: 140px; height: 60px; border: 2px dashed #007bff; background: rgba(0,123,255,0.1); display: none; z-index: 50; touch-action: none; }
         #sig-img { width: 100%; height: 100%; pointer-events: none; object-fit: contain; }
 
+        /* MODAL DE ASSINATURA */
         #modal { display: none; position: fixed; inset: 0; background: #000; z-index: 2000; flex-direction: column; align-items: center; justify-content: center; }
-        /* AJUSTE PARA TELA TODA NO HORIZONTAL */
-        #canvas-wrap { background: white; width: 98vw; height: 75vh; position: relative; border: 2px solid #555; }
-        #sig-canvas { width: 100%; height: 100%; cursor: crosshair; }
+        #canvas-wrap { background: white; width: 95vw; height: 65vh; position: relative; border: 2px solid #555; }
+        #sig-canvas { width: 100%; height: 100%; touch-action: none; }
         
-        .controls { position: fixed; bottom: 15px; left: 50%; transform: translateX(-50%); display: flex; gap: 8px; z-index: 150; display: none; background: rgba(0,0,0,0.8); padding: 10px; border-radius: 8px; }
+        /* BOTÕES DE CONTROLE */
+        .controls { position: fixed; bottom: 15px; left: 50%; transform: translateX(-50%); display: flex; gap: 8px; z-index: 150; display: none; background: rgba(0,0,0,0.85); padding: 12px; border-radius: 12px; border: 1px solid #444; }
+        
+        /* OVERLAY DE PRÉVIA FINAL */
+        #preview-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.9); z-index: 3000; flex-direction: column; align-items: center; justify-content: center; padding: 20px; }
+        #preview-frame { background: white; width: 90%; height: 70%; border-radius: 8px; overflow: hidden; }
+        #preview-frame iframe { width: 100%; height: 100%; border: none; }
     </style>
 </head>
 <body>
@@ -36,16 +41,15 @@
     </header>
 
     <div id="viewer"></div>
-
     <div id="drag-box"><img id="sig-img"></div>
 
     <div class="controls" id="action-btns">
-        <button class="btn" style="background:#28a745" onclick="processPdf(true)">GERAR COM TODAS</button>
-        <button class="btn" style="background:#007bff" onclick="processPdf(false)">GERAR SÓ ESTA</button>
+        <button class="btn" style="background:#28a745" onclick="generatePreview(true)">REVISAR TODAS</button>
+        <button class="btn" style="background:#007bff" onclick="generatePreview(false)">REVISAR SÓ ESTA</button>
     </div>
 
     <div id="modal">
-        <div style="margin-bottom:10px; color:#f39c12; font-weight:bold; font-size:14px;">ASSINE NO QUADRO ABAIXO</div>
+        <div style="margin-bottom:10px; color:#f39c12; font-weight:bold;">ASSINE NO QUADRO ABAIXO</div>
         <div id="canvas-wrap"><canvas id="sig-canvas"></canvas></div>
         <div style="margin-top:15px; display:flex; gap:12px;">
             <button class="btn" style="background:#28a745; width:100px;" onclick="confirmSig()">OK</button>
@@ -54,27 +58,46 @@
         </div>
     </div>
 
+    <div id="preview-overlay">
+        <h3 style="margin-top:0">PRÉVIA DO DOCUMENTO</h3>
+        <div id="preview-frame"><iframe id="preview-src"></iframe></div>
+        <div style="margin-top:20px; display:flex; gap:15px;">
+            <button class="btn" style="background:#28a745; padding:15px 25px;" id="download-final">CONFIRMAR E BAIXAR</button>
+            <button class="btn" style="background:#dc3545" onclick="closePreview()">REFAZER / VOLTAR</button>
+        </div>
+    </div>
+
     <script>
         const { PDFDocument } = PDFLib;
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
-        let pdfData, pad;
+        let pdfData, pad, currentBlobUrl;
         const view = document.getElementById('viewer'), box = document.getElementById('drag-box'), img = document.getElementById('sig-img'), actionBtns = document.getElementById('action-btns');
 
         function openModal() {
             if (!view.hasChildNodes()) return alert("Abra o PDF!");
             document.getElementById('modal').style.display = 'flex';
+            resizeCanvas();
+        }
+
+        function resizeCanvas() {
             const c = document.getElementById('sig-canvas');
             const wrap = c.parentElement;
-            // Força o redimensionamento real do canvas para o hardware do celular
             const dpr = window.devicePixelRatio || 1;
             c.width = wrap.clientWidth * dpr;
             c.height = wrap.clientHeight * dpr;
-            const ctx = c.getContext("2d");
-            ctx.scale(dpr, dpr);
+            c.getContext("2d").scale(dpr, dpr);
+            if (pad) pad.clear();
             pad = new SignaturePad(c);
         }
 
+        window.addEventListener('orientationchange', () => {
+            if(document.getElementById('modal').style.display === 'flex') {
+                setTimeout(resizeCanvas, 300);
+            }
+        });
+
         function closeModal() { document.getElementById('modal').style.display = 'none'; }
+        function closePreview() { document.getElementById('preview-overlay').style.display = 'none'; }
 
         function confirmSig() {
             if (pad.isEmpty()) return alert("Assine primeiro!");
@@ -109,7 +132,7 @@
             }
         };
 
-        async function processPdf(allPages) {
+        async function generatePreview(allPages) {
             const doc = await PDFDocument.load(pdfData);
             const sigPng = await doc.embedPng(img.src);
             const pages = doc.getPages();
@@ -133,14 +156,17 @@
 
             const b = await doc.save();
             const blob = new Blob([b], { type: 'application/pdf' });
-            // PRÉVIA: Abre o PDF processado em uma nova aba para conferência
-            const url = URL.createObjectURL(blob);
-            const win = window.open(url, '_blank');
-            if (!win) alert("Permita pop-ups para ver a prévia!");
+            if (currentBlobUrl) URL.revokeObjectURL(currentBlobUrl);
+            currentBlobUrl = URL.createObjectURL(blob);
             
-            // DOWNLOAD AUTOMÁTICO
-            const l = document.createElement('a');
-            l.href = url; l.download = "PDF_Pronto.pdf"; l.click();
+            // MOSTRA A PRÉVIA ANTES DE TUDO
+            document.getElementById('preview-src').src = currentBlobUrl;
+            document.getElementById('preview-overlay').style.display = 'flex';
+            
+            document.getElementById('download-final').onclick = () => {
+                const l = document.createElement('a');
+                l.href = currentBlobUrl; l.download = "PDF_Assinado.pdf"; l.click();
+            };
         }
     </script>
 </body>
