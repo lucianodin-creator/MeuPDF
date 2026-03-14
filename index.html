@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>MeuPDF v4.9</title>
+    <title>MeuPDF v5.0</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.0.0/dist/signature_pad.umd.min.js"></script>
     <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
@@ -16,12 +16,12 @@
         .btn { padding: 12px 15px; border: none; border-radius: 4px; font-weight: bold; color: white; font-size: 11px; }
         #viewer { flex: 1; overflow-y: auto; padding: 10px; display: flex; flex-direction: column; align-items: center; touch-action: pan-y; }
         .pdf-page-wrapper { position: relative; background: white; margin-bottom: 15px; box-shadow: 0 4px 10px #000; line-height: 0; }
-        .sig-box { position: absolute; width: 100px; height: 50px; border: 1.5px dashed #007bff; background: rgba(0,123,255,0.1); }
+        .sig-box { position: absolute; width: 120px; height: 60px; border: 1.5px dashed #007bff; background: rgba(0,123,255,0.1); }
         .sig-box img { width: 100%; height: 100%; pointer-events: none; }
         .resizer { position: absolute; bottom: -10px; right: -10px; width: 25px; height: 25px; background: #007bff; border-radius: 50%; border: 2px solid #fff; }
-        #canvas-container { flex: 1; display: flex; align-items: center; justify-content: center; padding: 5px; }
-        #canvas-wrapper { background: #fff; width: 98vw; height: 60vh; position: relative; border: 2px solid #f39c12; }
-        canvas#sig-canvas { width: 100% !important; height: 100% !important; touch-action: none; }
+        #canvas-container { flex: 1; display: flex; align-items: center; justify-content: center; padding: 10px; background: #222; }
+        #canvas-wrapper { background: #fff; width: 100%; max-width: 800px; height: 350px; position: relative; border: 2px solid #f39c12; }
+        canvas#sig-canvas { width: 100%; height: 100%; touch-action: none; display: block; }
         .footer-tools { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); display: none; }
     </style>
 </head>
@@ -37,13 +37,13 @@
     </div>
 
     <div id="screen-sign">
-        <div style="background:#f39c12; color:#000; padding:8px; text-align:center; font-weight:bold; font-size:12px;">v4.9 - ZERO DESVIO LATERAL</div>
+        <div style="background:#f39c12; color:#000; padding:10px; text-align:center; font-weight:bold; font-size:13px;">v5.0 - CALIBRAÇÃO FINAL</div>
         <div id="canvas-container">
             <div id="canvas-wrapper"><canvas id="sig-canvas"></canvas></div>
         </div>
-        <div style="padding:15px; display:flex; justify-content:center; gap:10px; background:#111;">
-            <button class="btn" style="background:#27ae60; min-width:80px;" onclick="applySignature()">OK</button>
-            <button class="btn" style="background:#e74c3c" onclick="pad.clear()">LIMPAR</button>
+        <div style="padding:20px; display:flex; justify-content:center; gap:15px; background:#111;">
+            <button class="btn" style="background:#27ae60; min-width:100px; font-size:14px;" onclick="applySignature()">OK</button>
+            <button class="btn" style="background:#e74c3c; min-width:100px; font-size:14px;" onclick="pad.clear()">LIMPAR</button>
             <button class="btn" style="background:#7f8c8d" onclick="hideSignScreen()">VOLTAR</button>
         </div>
     </div>
@@ -56,44 +56,19 @@
         function showSignScreen() {
             document.getElementById('screen-pdf').style.display = 'none';
             document.getElementById('screen-sign').style.display = 'flex';
-            setTimeout(initPad, 150);
+            setTimeout(resizeCanvas, 100);
         }
         function hideSignScreen() { document.getElementById('screen-sign').style.display = 'none'; document.getElementById('screen-pdf').style.display = 'flex'; }
 
-        function initPad() {
-            const c = document.getElementById('sig-canvas');
-            const wrap = document.getElementById('canvas-wrapper');
-            const ratio = window.devicePixelRatio || 1;
+        function resizeCanvas() {
+            const canvas = document.getElementById('sig-canvas');
+            const ratio = Math.max(window.devicePixelRatio || 1, 2);
+            canvas.width = canvas.offsetWidth * ratio;
+            canvas.height = canvas.offsetHeight * ratio;
+            canvas.getContext("2d").scale(ratio, ratio);
             
-            c.width = wrap.clientWidth * ratio;
-            c.height = wrap.clientHeight * ratio;
-            const ctx = c.getContext("2d");
-            ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
-
-            if (pad) pad.off();
-            pad = new SignaturePad(c, { penColor: "rgb(0, 40, 120)", minWidth: 1, maxWidth: 2 });
-
-            // OVERRIDE TOTAL: Mapeamento por porcentagem da tela
-            pad._handlePointerEvents = function(event) {
-                event.preventDefault();
-                const rect = c.getBoundingClientRect();
-                const touch = event.touches ? event.touches[0] : event;
-                
-                // Calcula a posição relativa (0 a 1) dentro do retângulo visível
-                // Isso mata o erro de escala acumulada porque não importa o tamanho que o navegador "acha" que o canvas tem
-                const relativeX = (touch.clientX - rect.left) / rect.width;
-                const relativeY = (touch.clientY - rect.top) / rect.height;
-
-                // Aplica essa proporção ao tamanho real de pixels do canvas
-                const x = relativeX * (c.width / ratio);
-                const y = relativeY * (c.height / ratio);
-                
-                const point = { x, y, time: Date.now() };
-                
-                if (event.type.includes('start')) pad._strokeBegin(point);
-                else if (event.type.includes('move')) pad._strokeUpdate(point);
-                else if (event.type.includes('end')) pad._strokeEnd(point);
-            };
+            if (pad) pad.clear();
+            else pad = new SignaturePad(canvas, { penColor: "rgb(0, 0, 128)", throttle: 0 });
         }
 
         function applySignature() {
@@ -104,7 +79,7 @@
                 const old = page.querySelector('.sig-box'); if(old) old.remove();
                 const box = document.createElement('div');
                 box.className = 'sig-box';
-                box.style.left = "20px"; box.style.top = "20px";
+                box.style.left = "50px"; box.style.top = "50px";
                 box.innerHTML = `<img src="${sigBase64}"><div class="resizer"></div>`;
                 
                 box.addEventListener("touchmove", (e) => {
@@ -160,7 +135,7 @@
             const bytes = await doc.save();
             const link = document.createElement('a');
             link.href = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
-            link.download = "Finalizado.pdf";
+            link.download = "Assinado_Luciano.pdf";
             link.click();
         }
     </script>
