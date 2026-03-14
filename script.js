@@ -4,16 +4,11 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs
 let pdfBytes, pdfDocJs, pad = null;
 let pctX = 0, pctY = 0, shouldDuplicate = false;
 
-const sigModal = document.getElementById('sig-modal'), sigCanvas = document.getElementById('sig-canvas');
+const sigModal = document.getElementById('sig-modal');
+const sigCanvas = document.getElementById('sig-canvas');
 const container = document.getElementById('pdf-main-container');
-
-// Elemento da assinatura
-const draggable = document.createElement('div');
-draggable.id = 'draggable-sig';
-draggable.innerHTML = `
-    <button id="btn-duplicate" type="button"><svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M13 0H6a2 2 0 0 0-2 2 2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h7a2 2 0 0 0 2-2 2 2 0 0 0 2-2V2a2 2 0 0 0-2-2zM6 1h7a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1z"/></svg></button>
-    <img id="sig-preview" style="width:100%; height:100%; pointer-events:none; object-fit:contain;">
-    <div id="resizer"></div>`;
+const draggable = document.getElementById('draggable-sig');
+const sigPreview = document.getElementById('sig-preview');
 
 function openSignature() {
     if (!pdfBytes) return alert("Abra um PDF primeiro!");
@@ -30,61 +25,40 @@ function setupCanvas() {
     pad.clear();
 }
 
-window.addEventListener("resize", () => { if (sigModal.style.display === 'flex') setupCanvas(); });
-
-// FUNÇÃO CONFIRMAR REESCRITA (CORREÇÃO CHROME/FIREFOX)
-document.getElementById('btn-confirm-sig').onclick = function(e) {
-    e.preventDefault();
-    if (!pad || pad.isEmpty()) {
-        alert("Assine antes de confirmar!");
-        return;
-    }
-
-    try {
-        const dataUrl = pad.toDataURL();
-        document.getElementById('sig-preview').src = dataUrl;
-
-        // Procura a primeira página renderizada
-        const firstPage = container.querySelector('.page-wrapper');
-        
-        if (!firstPage) {
-            alert("Erro: O PDF ainda não foi carregado na tela.");
-            return;
-        }
-
-        // Adiciona a assinatura na tela
-        firstPage.appendChild(draggable);
-        draggable.style.display = 'block';
-        draggable.style.left = "50px"; 
-        draggable.style.top = "50px";
-
-        // Fecha o modal
-        sigModal.style.display = 'none';
-        console.log("Assinatura aplicada com sucesso.");
-    } catch (err) {
-        alert("Erro ao confirmar: " + err.message);
-    }
+// BOTÃO CONFIRMAR
+document.getElementById('btn-confirm-sig').onclick = function() {
+    if (!pad || pad.isEmpty()) return alert("Assine primeiro!");
+    
+    const dataUrl = pad.toDataURL();
+    sigPreview.src = dataUrl;
+    
+    // Mostra a assinatura e reseta posição
+    draggable.style.display = 'block';
+    draggable.style.left = "50px";
+    draggable.style.top = "100px";
+    
+    // Garante que a assinatura fique visível por cima de tudo
+    container.appendChild(draggable); 
+    
+    sigModal.style.display = 'none';
 };
 
 function closeModal() { sigModal.style.display = 'none'; }
 
-// Botão Duplicar
-draggable.querySelector('#btn-duplicate').onclick = function(e) {
+document.getElementById('btn-duplicate').onclick = function(e) {
     e.stopPropagation();
     shouldDuplicate = !shouldDuplicate;
     this.style.background = shouldDuplicate ? "#27ae60" : "#2980b9";
 };
 
-// Arraste e Redimensionamento
+// ARRASTE E REDIMENSIONAMENTO
 let isResizing = false;
 draggable.addEventListener("touchstart", (e) => { isResizing = (e.target.id === 'resizer'); });
 
 draggable.addEventListener("touchmove", (e) => {
     e.preventDefault();
     const touch = e.touches[0];
-    const wrapper = draggable.parentElement;
-    if(!wrapper) return;
-    const rect = wrapper.getBoundingClientRect();
+    const rect = container.getBoundingClientRect();
 
     if (isResizing) {
         const dRect = draggable.getBoundingClientRect();
@@ -93,23 +67,22 @@ draggable.addEventListener("touchmove", (e) => {
     } else {
         let x = touch.clientX - rect.left - (draggable.offsetWidth / 2);
         let y = touch.clientY - rect.top - (draggable.offsetHeight / 2);
-        draggable.style.left = Math.max(0, Math.min(x, rect.width - draggable.offsetWidth)) + "px";
-        draggable.style.top = Math.max(0, Math.min(y, rect.height - draggable.offsetHeight)) + "px";
+        draggable.style.left = x + "px";
+        draggable.style.top = y + "px";
     }
-    pctX = (parseInt(draggable.style.left) + (draggable.offsetWidth / 2)) / rect.width;
-    pctY = (parseInt(draggable.style.top) + (draggable.offsetHeight / 2)) / rect.height;
 }, { passive: false });
 
-// Abrir PDF
+// ABRIR PDF
 document.getElementById('file-in').onchange = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
     try {
         pdfBytes = await file.arrayBuffer();
-        const loadingTask = pdfjsLib.getDocument({data: pdfBytes});
-        pdfDocJs = await loadingTask.promise;
-        container.innerHTML = "";
-        
+        pdfDocJs = await pdfjsLib.getDocument({data: pdfBytes}).promise;
+        container.innerHTML = ""; // Limpa tudo
+        container.appendChild(draggable); // Recoloca a assinatura escondida
+        draggable.style.display = 'none';
+
         for (let i = 1; i <= pdfDocJs.numPages; i++) {
             const page = await pdfDocJs.getPage(i);
             const wrapper = document.createElement('div');
@@ -121,31 +94,43 @@ document.getElementById('file-in').onchange = async (e) => {
             wrapper.appendChild(canvas);
             container.appendChild(wrapper);
         }
-    } catch (err) {
-        alert("Erro no PDF: " + err.message);
-    }
+    } catch (err) { alert("Erro: " + err.message); }
 };
 
+// SALVAR PDF
 async function savePDF() {
-    if(!pdfBytes || !document.getElementById('sig-preview').src) return alert("Assine primeiro!");
+    if(!pdfBytes || !sigPreview.src) return alert("Falta o PDF ou a Assinatura!");
+    
     const doc = await PDFDocument.load(pdfBytes);
-    const sigImg = await doc.embedPng(document.getElementById('sig-preview').src);
-    const allPages = doc.getPages();
-    const pagesToSign = shouldDuplicate ? allPages : [allPages[0]];
-    const refRect = document.querySelector('.page-wrapper').getBoundingClientRect();
-    const relW = draggable.offsetWidth / refRect.width, relH = draggable.offsetHeight / refRect.height;
+    const sigImg = await doc.embedPng(sigPreview.src);
+    const pages = shouldDuplicate ? doc.getPages() : [doc.getPages()[0]];
+    
+    // Pega a primeira folha para referência de escala
+    const firstPageWrapper = container.querySelector('.page-wrapper');
+    const rect = firstPageWrapper.getBoundingClientRect();
+    
+    // Calcula posição relativa ao container de rolagem
+    const dRect = draggable.getBoundingClientRect();
+    const wRect = firstPageWrapper.getBoundingClientRect();
+    
+    const relX = (dRect.left - wRect.left + (dRect.width / 2)) / wRect.width;
+    const relY = (dRect.top - wRect.top + (dRect.height / 2)) / wRect.height;
+    const relW = dRect.width / wRect.width;
+    const relH = dRect.height / wRect.height;
 
-    pagesToSign.forEach(page => {
+    pages.forEach(page => {
         const { width, height } = page.getSize();
-        const finalW = width * relW, finalH = height * relH;
+        const finalW = width * relW;
+        const finalH = height * relH;
         page.drawImage(sigImg, {
-            x: (width * pctX) - (finalW / 2),
-            y: height - (height * pctY) - (finalH / 2),
+            x: (width * relX) - (finalW / 2),
+            y: height - (height * relY) - (finalH / 2),
             width: finalW, height: finalH
         });
     });
+
     const bytes = await doc.save();
     const link = document.createElement('a');
     link.href = URL.createObjectURL(new Blob([bytes], {type: 'application/pdf'}));
-    link.download = "contrato_assinado.pdf"; link.click();
+    link.download = "contrato_final.pdf"; link.click();
 }
