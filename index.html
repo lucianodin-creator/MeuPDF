@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>MeuPDF v5.0</title>
+    <title>MeuPDF v5.1</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.0.0/dist/signature_pad.umd.min.js"></script>
     <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
@@ -11,18 +11,22 @@
         * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; touch-action: none; }
         body { font-family: sans-serif; margin: 0; background: #000; color: #fff; height: 100vh; overflow: hidden; }
         #screen-pdf, #screen-sign { position: absolute; inset: 0; display: flex; flex-direction: column; }
-        #screen-sign { display: none; background: #1a1a1a; z-index: 2000; }
+        #screen-sign { display: none; background: #000; z-index: 2000; }
         header { background: #111; padding: 10px; display: flex; justify-content: center; gap: 8px; border-bottom: 1px solid #444; }
         .btn { padding: 12px 15px; border: none; border-radius: 4px; font-weight: bold; color: white; font-size: 11px; }
         #viewer { flex: 1; overflow-y: auto; padding: 10px; display: flex; flex-direction: column; align-items: center; touch-action: pan-y; }
-        .pdf-page-wrapper { position: relative; background: white; margin-bottom: 15px; box-shadow: 0 4px 10px #000; line-height: 0; }
+        .pdf-page-wrapper { position: relative; background: white; margin-bottom: 15px; box-shadow: 0 4px 10px #000; }
         .sig-box { position: absolute; width: 120px; height: 60px; border: 1.5px dashed #007bff; background: rgba(0,123,255,0.1); }
         .sig-box img { width: 100%; height: 100%; pointer-events: none; }
         .resizer { position: absolute; bottom: -10px; right: -10px; width: 25px; height: 25px; background: #007bff; border-radius: 50%; border: 2px solid #fff; }
-        #canvas-container { flex: 1; display: flex; align-items: center; justify-content: center; padding: 10px; background: #222; }
-        #canvas-wrapper { background: #fff; width: 100%; max-width: 800px; height: 350px; position: relative; border: 2px solid #f39c12; }
-        canvas#sig-canvas { width: 100%; height: 100%; touch-action: none; display: block; }
-        .footer-tools { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); display: none; }
+        
+        #canvas-container { flex: 1; display: flex; align-items: center; justify-content: center; background: #1a1a1a; padding: 0; }
+        /* Fixamos o tamanho em pixels para o navegador não tentar "ajustar" nada */
+        #canvas-wrapper { background: #fff; width: 320px; height: 180px; position: relative; box-shadow: 0 0 20px #000; }
+        @media (min-width: 600px) { #canvas-wrapper { width: 600px; height: 300px; } }
+        
+        canvas#sig-canvas { width: 100%; height: 100%; display: block; cursor: crosshair; }
+        .sign-footer { padding: 15px; display: flex; justify-content: center; gap: 15px; background: #111; }
     </style>
 </head>
 <body>
@@ -33,17 +37,19 @@
             <button class="btn" style="background:#f39c12" onclick="showSignScreen()">2. ASSINAR</button>
         </header>
         <div id="viewer"></div>
-        <div class="footer-tools" id="final-tools"><button class="btn" style="background:#27ae60; padding: 15px 30px;" onclick="saveFinalPdf()">GERAR PDF FINAL</button></div>
+        <div id="final-tools" style="position:fixed; bottom:20px; left:50%; transform:translateX(-50%); display:none;">
+            <button class="btn" style="background:#27ae60; padding:15px 30px;" onclick="saveFinalPdf()">GERAR PDF FINAL</button>
+        </div>
     </div>
 
     <div id="screen-sign">
-        <div style="background:#f39c12; color:#000; padding:10px; text-align:center; font-weight:bold; font-size:13px;">v5.0 - CALIBRAÇÃO FINAL</div>
+        <div style="background:#f39c12; color:#000; padding:10px; text-align:center; font-weight:bold; font-size:12px;">v5.1 - MODO HARDWARE (POINTER)</div>
         <div id="canvas-container">
             <div id="canvas-wrapper"><canvas id="sig-canvas"></canvas></div>
         </div>
-        <div style="padding:20px; display:flex; justify-content:center; gap:15px; background:#111;">
-            <button class="btn" style="background:#27ae60; min-width:100px; font-size:14px;" onclick="applySignature()">OK</button>
-            <button class="btn" style="background:#e74c3c; min-width:100px; font-size:14px;" onclick="pad.clear()">LIMPAR</button>
+        <div class="sign-footer">
+            <button class="btn" style="background:#27ae60; min-width:90px;" onclick="applySignature()">OK</button>
+            <button class="btn" style="background:#e74c3c" onclick="pad.clear()">LIMPAR</button>
             <button class="btn" style="background:#7f8c8d" onclick="hideSignScreen()">VOLTAR</button>
         </div>
     </div>
@@ -56,19 +62,48 @@
         function showSignScreen() {
             document.getElementById('screen-pdf').style.display = 'none';
             document.getElementById('screen-sign').style.display = 'flex';
-            setTimeout(resizeCanvas, 100);
+            setTimeout(initCanvas, 100);
         }
         function hideSignScreen() { document.getElementById('screen-sign').style.display = 'none'; document.getElementById('screen-pdf').style.display = 'flex'; }
 
-        function resizeCanvas() {
+        function initCanvas() {
             const canvas = document.getElementById('sig-canvas');
-            const ratio = Math.max(window.devicePixelRatio || 1, 2);
-            canvas.width = canvas.offsetWidth * ratio;
-            canvas.height = canvas.offsetHeight * ratio;
-            canvas.getContext("2d").scale(ratio, ratio);
+            const wrap = document.getElementById('canvas-wrapper');
+            const ratio = window.devicePixelRatio || 1;
             
-            if (pad) pad.clear();
-            else pad = new SignaturePad(canvas, { penColor: "rgb(0, 0, 128)", throttle: 0 });
+            canvas.width = wrap.clientWidth * ratio;
+            canvas.height = wrap.clientHeight * ratio;
+            const ctx = canvas.getContext("2d");
+            ctx.scale(ratio, ratio);
+
+            if (pad) pad.off();
+            
+            // Usando PointerEvents para evitar distorção de escala de toque do navegador
+            pad = new SignaturePad(canvas, {
+                penColor: "rgb(0, 0, 100)",
+                minWidth: 1,
+                maxWidth: 2.5
+            });
+
+            // CORREÇÃO RADICAL: Ignora clientX/Y e usa offsetX/Y que é relativo apenas ao canvas
+            pad._handlePointerEvents = function(event) {
+                event.preventDefault();
+                // O offsetX é a distância real do ponto de toque até a borda do canvas
+                // Ele ignora completamente o zoom da página e margens pretas
+                const x = event.offsetX;
+                const y = event.offsetY;
+                
+                const point = { x, y, time: Date.now() };
+                
+                if (event.type.includes('pointerdown')) pad._strokeBegin(point);
+                else if (event.type.includes('pointermove')) pad._strokeUpdate(point);
+                else if (event.type.includes('pointerup')) pad._strokeEnd(point);
+            };
+
+            // Registra os novos eventos de hardware
+            canvas.addEventListener('pointerdown', pad._handlePointerEvents);
+            canvas.addEventListener('pointermove', pad._handlePointerEvents);
+            canvas.addEventListener('pointerup', pad._handlePointerEvents);
         }
 
         function applySignature() {
@@ -79,7 +114,7 @@
                 const old = page.querySelector('.sig-box'); if(old) old.remove();
                 const box = document.createElement('div');
                 box.className = 'sig-box';
-                box.style.left = "50px"; box.style.top = "50px";
+                box.style.left = "40px"; box.style.top = "40px";
                 box.innerHTML = `<img src="${sigBase64}"><div class="resizer"></div>`;
                 
                 box.addEventListener("touchmove", (e) => {
@@ -135,7 +170,7 @@
             const bytes = await doc.save();
             const link = document.createElement('a');
             link.href = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
-            link.download = "Assinado_Luciano.pdf";
+            link.download = "Contrato_Assinado.pdf";
             link.click();
         }
     </script>
