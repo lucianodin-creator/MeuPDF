@@ -1,81 +1,70 @@
 const { PDFDocument } = PDFLib;
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
 
-let pdfBytes, pdfDocJs, pad = null, shouldDuplicate = false;
-const sigModal = document.getElementById('sig-modal'), sigCanvas = document.getElementById('sig-canvas');
+let pdfBytes, pdfDocJs, pad = null;
+const sigModal = document.getElementById('sig-modal');
 const container = document.getElementById('pdf-main-container'), draggable = document.getElementById('draggable-sig');
 const sigPreview = document.getElementById('sig-preview'), btnDupli = document.getElementById('btn-duplicate');
 
 function openSignature() {
-    if (!container.querySelector('.page-wrapper')) return alert("Selecione um PDF!");
+    if (!container.querySelector('.page-wrapper')) return alert("Abra um PDF primeiro!");
     sigModal.style.display = 'flex';
-    // No Firefox, precisamos de um tempo maior para o layout estabilizar
-    setTimeout(setupCanvas, 400);
+    
+    // CORREÇÃO: Recria o canvas do zero para evitar janelas cortadas
+    const canvasContainer = document.getElementById('sig-canvas-container');
+    canvasContainer.innerHTML = '<canvas id="sig-canvas"></canvas>';
+    const canvas = document.getElementById('sig-canvas');
+    
+    const rect = canvasContainer.getBoundingClientRect();
+    const ratio = window.devicePixelRatio || 1;
+    canvas.width = rect.width * ratio;
+    canvas.height = rect.height * ratio;
+    canvas.getContext("2d").scale(ratio, ratio);
+    
+    pad = new SignaturePad(canvas, { penColor: 'black' });
 }
 
-function setupCanvas() {
-    const rect = sigCanvas.parentElement.getBoundingClientRect();
-    const ratio = Math.max(window.devicePixelRatio || 1, 2);
-    
-    // Configuração específica para evitar transbordo no Firefox
-    sigCanvas.width = rect.width * ratio;
-    sigCanvas.height = rect.height * ratio;
-    
-    const ctx = sigCanvas.getContext("2d");
-    ctx.scale(ratio, ratio);
-    
-    if (pad) pad.off();
-    pad = new SignaturePad(sigCanvas, { 
-        penColor: 'black',
-        backgroundColor: 'rgba(255, 255, 255, 0)'
-    });
-    pad.clear();
-}
+function closeModal() { sigModal.style.display = 'none'; }
+
+// Duplicação baseada no texto do botão (mais seguro)
+btnDupli.onclick = function(e) {
+    e.stopPropagation();
+    if (this.innerText.includes("ÚNICA")) {
+        this.innerText = "PÁG: TODAS";
+        this.style.background = "#27ae60";
+    } else {
+        this.innerText = "PÁG: ÚNICA";
+        this.style.background = "#d35400";
+    }
+};
 
 document.getElementById('btn-confirm-sig').onclick = function() {
     if (!pad || pad.isEmpty()) return alert("Assine primeiro!");
     sigPreview.src = pad.toDataURL();
     draggable.style.display = 'block';
+    
     const firstPage = container.querySelector('.page-wrapper');
     if (firstPage) {
         firstPage.appendChild(draggable);
-        draggable.style.left = "20px"; draggable.style.top = "20px";
+        draggable.style.left = "20px";
+        draggable.style.top = "20px";
     }
     closeModal();
 };
 
-function closeModal() { sigModal.style.display = 'none'; }
-
-btnDupli.onclick = function(e) {
-    e.stopPropagation();
-    shouldDuplicate = !shouldDuplicate;
-    this.innerText = shouldDuplicate ? "PÁG: TODAS (ATIVO)" : "PÁG: ÚNICA (OFF)";
-    this.style.background = shouldDuplicate ? "#27ae60" : "#d35400";
-};
-
-// Arraste e Redimensionamento corrigido
-let isResizing = false;
-draggable.addEventListener("touchstart", (e) => { 
-    isResizing = (e.target.id === 'resizer'); 
-}, {passive: true});
-
+// Lógica de Arraste (simplificada para evitar conflitos no Firefox)
 draggable.addEventListener("touchmove", (e) => {
     e.preventDefault();
     const parent = draggable.parentElement;
     if (!parent) return;
     const rect = parent.getBoundingClientRect();
     const touch = e.touches[0];
-
-    if (isResizing) {
-        const dRect = draggable.getBoundingClientRect();
-        draggable.style.width = Math.max(50, touch.clientX - dRect.left) + "px";
-        draggable.style.height = Math.max(30, touch.clientY - dRect.top) + "px";
-    } else {
-        let x = touch.clientX - rect.left - (draggable.offsetWidth / 2);
-        let y = touch.clientY - rect.top - (draggable.offsetHeight / 2);
-        draggable.style.left = x + "px";
-        draggable.style.top = y + "px";
-    }
+    
+    const x = touch.clientX - rect.left - (draggable.offsetWidth / 2);
+    const y = touch.clientY - rect.top - (draggable.offsetHeight / 2);
+    
+    draggable.style.left = Math.max(0, Math.min(x, rect.width - draggable.offsetWidth)) + "px";
+    draggable.style.top = Math.max(0, Math.min(y, rect.height - draggable.offsetHeight)) + "px";
 }, { passive: false });
 
 document.getElementById('file-in').onchange = async (e) => {
@@ -98,34 +87,35 @@ document.getElementById('file-in').onchange = async (e) => {
 };
 
 async function savePDF() {
-    if(!pdfBytes || !sigPreview.src) return alert("Assine antes!");
-    try {
-        const doc = await PDFDocument.load(pdfBytes);
-        const sigImg = await doc.embedPng(sigPreview.src);
-        const pages = doc.getPages();
-        const wrapper = container.querySelector('.page-wrapper');
-        
-        const relX = parseFloat(draggable.style.left) / wrapper.offsetWidth;
-        const relY = parseFloat(draggable.style.top) / wrapper.offsetHeight;
-        const relW = draggable.offsetWidth / wrapper.offsetWidth;
-        const relH = draggable.offsetHeight / wrapper.offsetHeight;
+    if(!pdfBytes || !sigPreview.src) return alert("Falta a assinatura!");
+    const doc = await PDFDocument.load(pdfBytes);
+    const sigImg = await doc.embedPng(sigPreview.src);
+    const pages = doc.getPages();
+    const wrapper = container.querySelector('.page-wrapper');
+    
+    const relX = parseFloat(draggable.style.left) / wrapper.offsetWidth;
+    const relY = parseFloat(draggable.style.top) / wrapper.offsetHeight;
+    const relW = draggable.offsetWidth / wrapper.offsetWidth;
+    const relH = draggable.offsetHeight / wrapper.offsetHeight;
 
-        const limit = shouldDuplicate ? pages.length : 1;
-        for (let i = 0; i < limit; i++) {
-            const p = pages[i];
-            const { width, height } = p.getSize();
-            p.drawImage(sigImg, {
-                x: width * relX,
-                y: height - (height * relY) - (height * relH),
-                width: width * relW, 
-                height: height * relH
-            });
-        }
-        const bytes = await doc.save();
-        const blob = new Blob([bytes], {type: 'application/pdf'});
-        const link = document.createElement('a');
-        link.href = URL.createObjectURL(blob);
-        link.download = "moraes_assinado.pdf"; 
-        link.click();
-    } catch (err) { alert("Erro ao salvar: " + err.message); }
+    // Verifica o estado atual do botão para decidir a duplicação
+    const isMulti = btnDupli.innerText.includes("TODAS");
+    const total = isMulti ? pages.length : 1;
+
+    for (let i = 0; i < total; i++) {
+        const p = pages[i];
+        const { width, height } = p.getSize();
+        p.drawImage(sigImg, {
+            x: width * relX,
+            y: height - (height * relY) - (height * relH),
+            width: width * relW,
+            height: height * relH
+        });
+    }
+    
+    const bytes = await doc.save();
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(new Blob([bytes], {type: 'application/pdf'}));
+    link.download = "moraes_shop_assinado.pdf";
+    link.click();
 }
