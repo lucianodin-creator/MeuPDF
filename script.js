@@ -9,19 +9,26 @@ const sigPreview = document.getElementById('sig-preview'), btnDupli = document.g
 function openSignature() {
     if (!container.querySelector('.page-wrapper')) return alert("Selecione um PDF!");
     sigModal.style.display = 'flex';
-    setTimeout(setupCanvas, 200);
+    // No Firefox, precisamos de um tempo maior para o layout estabilizar
+    setTimeout(setupCanvas, 400);
 }
 
 function setupCanvas() {
     const rect = sigCanvas.parentElement.getBoundingClientRect();
-    const ratio = window.devicePixelRatio || 1;
-    // Reseta o tamanho do canvas para o tamanho do container no momento da abertura
+    const ratio = Math.max(window.devicePixelRatio || 1, 2);
+    
+    // Configuração específica para evitar transbordo no Firefox
     sigCanvas.width = rect.width * ratio;
     sigCanvas.height = rect.height * ratio;
-    sigCanvas.getContext("2d").scale(ratio, ratio);
+    
+    const ctx = sigCanvas.getContext("2d");
+    ctx.scale(ratio, ratio);
     
     if (pad) pad.off();
-    pad = new SignaturePad(sigCanvas, { penColor: 'black' });
+    pad = new SignaturePad(sigCanvas, { 
+        penColor: 'black',
+        backgroundColor: 'rgba(255, 255, 255, 0)'
+    });
     pad.clear();
 }
 
@@ -42,25 +49,32 @@ function closeModal() { sigModal.style.display = 'none'; }
 btnDupli.onclick = function(e) {
     e.stopPropagation();
     shouldDuplicate = !shouldDuplicate;
-    this.innerText = shouldDuplicate ? "PÁG: TODAS" : "PÁG: ÚNICA";
+    this.innerText = shouldDuplicate ? "PÁG: TODAS (ATIVO)" : "PÁG: ÚNICA (OFF)";
     this.style.background = shouldDuplicate ? "#27ae60" : "#d35400";
 };
 
-// Logica de Arraste
+// Arraste e Redimensionamento corrigido
 let isResizing = false;
-draggable.addEventListener("touchstart", (e) => { isResizing = (e.target.id === 'resizer'); });
+draggable.addEventListener("touchstart", (e) => { 
+    isResizing = (e.target.id === 'resizer'); 
+}, {passive: true});
+
 draggable.addEventListener("touchmove", (e) => {
     e.preventDefault();
     const parent = draggable.parentElement;
     if (!parent) return;
     const rect = parent.getBoundingClientRect();
     const touch = e.touches[0];
+
     if (isResizing) {
-        draggable.style.width = Math.max(50, touch.clientX - draggable.getBoundingClientRect().left) + "px";
-        draggable.style.height = Math.max(30, touch.clientY - draggable.getBoundingClientRect().top) + "px";
+        const dRect = draggable.getBoundingClientRect();
+        draggable.style.width = Math.max(50, touch.clientX - dRect.left) + "px";
+        draggable.style.height = Math.max(30, touch.clientY - dRect.top) + "px";
     } else {
-        draggable.style.left = (touch.clientX - rect.left - draggable.offsetWidth/2) + "px";
-        draggable.style.top = (touch.clientY - rect.top - draggable.offsetHeight/2) + "px";
+        let x = touch.clientX - rect.left - (draggable.offsetWidth / 2);
+        let y = touch.clientY - rect.top - (draggable.offsetHeight / 2);
+        draggable.style.left = x + "px";
+        draggable.style.top = y + "px";
     }
 }, { passive: false });
 
@@ -85,29 +99,33 @@ document.getElementById('file-in').onchange = async (e) => {
 
 async function savePDF() {
     if(!pdfBytes || !sigPreview.src) return alert("Assine antes!");
-    const doc = await PDFDocument.load(pdfBytes);
-    const sigImg = await doc.embedPng(sigPreview.src);
-    const pages = doc.getPages();
-    const wrapper = container.querySelector('.page-wrapper');
-    
-    const relX = parseInt(draggable.style.left) / wrapper.offsetWidth;
-    const relY = parseInt(draggable.style.top) / wrapper.offsetHeight;
-    const relW = draggable.offsetWidth / wrapper.offsetWidth;
-    const relH = draggable.offsetHeight / wrapper.offsetHeight;
+    try {
+        const doc = await PDFDocument.load(pdfBytes);
+        const sigImg = await doc.embedPng(sigPreview.src);
+        const pages = doc.getPages();
+        const wrapper = container.querySelector('.page-wrapper');
+        
+        const relX = parseFloat(draggable.style.left) / wrapper.offsetWidth;
+        const relY = parseFloat(draggable.style.top) / wrapper.offsetHeight;
+        const relW = draggable.offsetWidth / wrapper.offsetWidth;
+        const relH = draggable.offsetHeight / wrapper.offsetHeight;
 
-    // FORÇA O LOOP EM TODAS SE A VARIÁVEL FOR TRUE
-    const limit = shouldDuplicate ? pages.length : 1;
-    for (let i = 0; i < limit; i++) {
-        const p = pages[i];
-        const { width, height } = p.getSize();
-        p.drawImage(sigImg, {
-            x: width * relX,
-            y: height - (height * relY) - (height * relH),
-            width: width * relW, height: height * relH
-        });
-    }
-    const bytes = await doc.save();
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(new Blob([bytes], {type: 'application/pdf'}));
-    link.download = "contrato_assinado.pdf"; link.click();
+        const limit = shouldDuplicate ? pages.length : 1;
+        for (let i = 0; i < limit; i++) {
+            const p = pages[i];
+            const { width, height } = p.getSize();
+            p.drawImage(sigImg, {
+                x: width * relX,
+                y: height - (height * relY) - (height * relH),
+                width: width * relW, 
+                height: height * relH
+            });
+        }
+        const bytes = await doc.save();
+        const blob = new Blob([bytes], {type: 'application/pdf'});
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = "moraes_assinado.pdf"; 
+        link.click();
+    } catch (err) { alert("Erro ao salvar: " + err.message); }
 }

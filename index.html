@@ -3,35 +3,39 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Moraes Shop - Assinador</title>
+    <title>Moraes Shop - Assinador Pro</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.0.0/dist/signature_pad.umd.min.js"></script>
     <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
     <style>
         body { font-family: sans-serif; margin: 0; padding: 0; background: #2c3e50; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
-        #toolbar { background: #1a252f; padding: 10px; display: flex; justify-content: center; gap: 8px; z-index: 1000; }
+        #toolbar { background: #1a252f; padding: 10px; display: flex; justify-content: center; gap: 8px; z-index: 100; }
         .btn { padding: 10px 15px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; color: white; font-size: 12px; }
         .btn-open { background: #3498db; }
         .btn-sign { background: #f39c12; }
         .btn-save { background: #27ae60; }
         
-        #pdf-main-container { flex: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; align-items: center; background: #34495e; }
-        .page-wrapper { position: relative; background: white; margin-bottom: 15px; box-shadow: 0 4px 20px rgba(0,0,0,0.3); }
+        #pdf-main-container { flex: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; align-items: center; background: #34495e; position: relative; }
+        .page-wrapper { position: relative; background: white; margin-bottom: 15px; box-shadow: 0 4px 20px rgba(0,0,0,0.3); line-height: 0; }
         
         #draggable-sig {
             position: absolute; width: 140px; height: 60px; display: none; 
             border: 2px dashed #3498db; background: rgba(52, 152, 219, 0.1); 
-            touch-action: none; z-index: 999;
+            touch-action: none; z-index: 99;
         }
-        #btn-duplicate { position: absolute; top: -35px; left: 0; background: #d35400; color: white; border: none; border-radius: 4px; padding: 5px; font-size: 10px; }
-        #resizer { position: absolute; bottom: -5px; right: -5px; width: 20px; height: 20px; background: #3498db; cursor: nwse-resize; }
+        #btn-duplicate { position: absolute; top: -35px; left: 0; background: #d35400; color: white; border: none; border-radius: 4px; padding: 5px; font-size: 10px; white-space: nowrap; }
+        #resizer { position: absolute; bottom: -5px; right: -5px; width: 22px; height: 22px; background: #3498db; border-radius: 50%; border: 2px solid white; }
 
         #sig-modal {
             display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.9); z-index: 2000; justify-content: center; align-items: center; flex-direction: column;
+            background: rgba(0,0,0,0.95); z-index: 9999; justify-content: center; align-items: center; flex-direction: column;
         }
-        #sig-canvas-container { background: white; width: 95%; height: 70%; position: relative; border-radius: 8px; }
-        #sig-canvas { width: 100%; height: 100%; touch-action: none; border-radius: 8px; }
+        #sig-canvas-container { 
+            background: white; width: 90%; height: 65%; position: relative; 
+            border: 4px solid #f39c12; border-radius: 10px; overflow: hidden;
+        }
+        #sig-canvas { width: 100%; height: 100%; touch-action: none; display: block; }
+        .modal-footer { margin-top: 15px; display: flex; gap: 10px; z-index: 10000; position: relative; }
     </style>
 </head>
 <body>
@@ -52,7 +56,7 @@
 
     <div id="sig-modal">
         <div id="sig-canvas-container"><canvas id="sig-canvas"></canvas></div>
-        <div style="margin-top: 15px; display: flex; gap: 10px;">
+        <div class="modal-footer">
             <button class="btn btn-save" id="btn-confirm-sig">Confirmar</button>
             <button class="btn" style="background:#e74c3c" onclick="pad.clear()">Limpar</button>
             <button class="btn" style="background:#95a5a6" onclick="closeModal()">Sair</button>
