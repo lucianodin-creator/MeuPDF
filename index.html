@@ -3,29 +3,28 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>MeuPDF v2.5</title>
+    <title>MeuPDF v2.6</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.0.0/dist/signature_pad.umd.min.js"></script>
     <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
     <style>
-        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-        body { font-family: sans-serif; margin: 0; background: #000; color: #fff; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
-        header { background: #222; padding: 10px; display: flex; justify-content: center; gap: 8px; border-bottom: 2px solid #333; z-index: 100; }
-        .btn { padding: 12px 15px; border: none; border-radius: 4px; font-weight: bold; color: white; text-transform: uppercase; font-size: 11px; cursor: pointer; }
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; touch-action: none; }
+        body { font-family: sans-serif; margin: 0; background: #000; color: #fff; height: 100vh; overflow: hidden; display: flex; flex-direction: column; }
+        header { background: #222; padding: 10px; display: flex; justify-content: center; gap: 8px; border-bottom: 2px solid #333; touch-action: auto; }
+        .btn { padding: 12px 15px; border: none; border-radius: 4px; font-weight: bold; color: white; text-transform: uppercase; font-size: 11px; cursor: pointer; touch-action: auto; }
         
-        #viewer { flex: 1; overflow-y: auto; background: #1a1a1a; padding: 15px; display: flex; flex-direction: column; align-items: center; }
+        #viewer { flex: 1; overflow-y: auto; background: #1a1a1a; padding: 15px; display: flex; flex-direction: column; align-items: center; touch-action: pan-y; }
         .pdf-page-wrapper { position: relative; background: white; margin-bottom: 25px; line-height: 0; box-shadow: 0 5px 25px #000; }
         
-        /* ESTILO DA ASSINATURA QUE PODE SER MOVIDA EM CADA PÁGINA */
-        .sig-box { position: absolute; width: 120px; height: 55px; border: 1px dashed #007bff; background: rgba(0,123,255,0.05); touch-action: none; z-index: 10; }
+        .sig-box { position: absolute; width: 150px; height: 70px; border: 2px dashed #007bff; background: rgba(0,123,255,0.05); z-index: 10; }
         .sig-box img { width: 100%; height: 100%; pointer-events: none; object-fit: contain; }
-        .resizer { position: absolute; bottom: -8px; right: -8px; width: 24px; height: 24px; background: #007bff; border-radius: 50%; border: 2px solid #fff; z-index: 11; }
+        .resizer { position: absolute; bottom: -12px; right: -12px; width: 30px; height: 30px; background: #007bff; border-radius: 50%; border: 2px solid #fff; z-index: 20; }
 
         #modal { display: none; position: fixed; inset: 0; background: #000; z-index: 2000; flex-direction: column; align-items: center; justify-content: center; }
-        #canvas-wrap { background: white; width: 98vw; height: 75vh; position: relative; }
-        #sig-canvas { width: 100%; height: 100%; touch-action: none; }
+        #canvas-wrap { background: white; width: 100vw; height: 80vh; position: relative; overflow: hidden; border-top: 2px solid #f39c12; border-bottom: 2px solid #f39c12; }
+        #sig-canvas { width: 100%; height: 100%; cursor: crosshair; }
         
-        .footer-tools { position: fixed; bottom: 15px; left: 50%; transform: translateX(-50%); display: flex; gap: 8px; z-index: 150; background: rgba(0,0,0,0.9); padding: 10px; border-radius: 12px; border: 1px solid #444; }
+        .footer-tools { position: fixed; bottom: 15px; left: 50%; transform: translateX(-50%); display: none; z-index: 150; background: rgba(0,0,0,0.9); padding: 12px; border-radius: 12px; border: 1px solid #444; touch-action: auto; }
     </style>
 </head>
 <body>
@@ -37,15 +36,15 @@
 
     <div id="viewer"></div>
 
-    <div class="footer-tools" id="final-tools" style="display:none">
+    <div class="footer-tools" id="final-tools">
         <button class="btn" style="background:#28a745" onclick="saveFinalPdf()">FINALIZAR E BAIXAR PDF</button>
     </div>
 
     <div id="modal">
-        <div style="margin-bottom:10px; color:#f39c12; font-weight:bold;">ASSINE NO QUADRO ABAIXO</div>
+        <div style="margin-bottom:10px; color:#f39c12; font-weight:bold; letter-spacing: 1px;">ASSINE EM QUALQUER LUGAR DA TELA BRANCA</div>
         <div id="canvas-wrap"><canvas id="sig-canvas"></canvas></div>
-        <div style="margin-top:15px; display:flex; gap:12px;">
-            <button class="btn" style="background:#28a745; width:100px;" onclick="applySignatureToAll()">OK</button>
+        <div style="margin-top:15px; display:flex; gap:15px;">
+            <button class="btn" style="background:#28a745; width:120px;" onclick="applySignatureToAll()">OK</button>
             <button class="btn" style="background:#dc3545" onclick="pad.clear()">LIMPAR</button>
             <button class="btn" style="background:#6c757d" onclick="closeModal()">VOLTAR</button>
         </div>
@@ -64,8 +63,10 @@
             const dpr = window.devicePixelRatio || 1;
             c.width = c.parentElement.clientWidth * dpr;
             c.height = c.parentElement.clientHeight * dpr;
+            c.getContext("2d").setTransform(1, 0, 0, 1, 0, 0); 
             c.getContext("2d").scale(dpr, dpr);
-            pad = new SignaturePad(c);
+            if (pad) pad.off(); 
+            pad = new SignaturePad(c, { throttle: 0, minWidth: 1.5, maxWidth: 4 });
         }
 
         function closeModal() { document.getElementById('modal').style.display = 'none'; }
@@ -75,16 +76,14 @@
             sigBase64 = pad.toDataURL();
             const pages = document.querySelectorAll('.pdf-page-wrapper');
             pages.forEach(page => {
-                // Remove assinaturas antigas se existirem
                 const old = page.querySelector('.sig-box');
                 if(old) old.remove();
 
                 const box = document.createElement('div');
                 box.className = 'sig-box';
-                box.style.left = "50px"; box.style.top = "50px";
+                box.style.left = "20px"; box.style.top = "20px";
                 box.innerHTML = `<img src="${sigBase64}"><div class="resizer"></div>`;
                 
-                // Lógica de Arrastar Individual
                 box.addEventListener("touchmove", (e) => {
                     if(e.target.classList.contains('resizer')) return;
                     const r = page.getBoundingClientRect();
@@ -93,22 +92,19 @@
                     box.style.top = (t.clientY - r.top - (box.offsetHeight/2)) + "px";
                 });
 
-                // Lógica de Redimensionar Individual
-                const resizer = box.querySelector('.resizer');
-                resizer.addEventListener("touchmove", (e) => {
+                box.querySelector('.resizer').addEventListener("touchmove", (e) => {
                     e.stopPropagation();
                     const t = e.touches[0];
                     const r = box.getBoundingClientRect();
                     const newW = t.clientX - r.left;
-                    if (newW > 40 && newW < 300) {
+                    if (newW > 40 && newW < 400) {
                         box.style.width = newW + "px";
-                        box.style.height = (newW * 0.45) + "px";
+                        box.style.height = (newW * 0.46) + "px";
                     }
                 });
-
                 page.appendChild(box);
             });
-            document.getElementById('final-tools').style.display = 'flex';
+            document.getElementById('final-tools').style.display = 'block';
             closeModal();
         }
 
@@ -156,7 +152,7 @@
             const blob = new Blob([bytes], { type: 'application/pdf' });
             const link = document.createElement('a');
             link.href = URL.createObjectURL(blob);
-            link.download = "Documento_Assinado_Final.pdf";
+            link.download = "PDF_Assinado_Luciano.pdf";
             link.click();
         }
     </script>
