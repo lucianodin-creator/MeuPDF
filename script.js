@@ -7,57 +7,72 @@ const container = document.getElementById('pdf-main-container'), draggable = doc
 const sigPreview = document.getElementById('sig-preview'), btnDupli = document.getElementById('btn-duplicate');
 
 function openSignature() {
-    if (!container.querySelector('.page-wrapper')) return alert("Abra um PDF primeiro!");
+    if (!container.querySelector('.page-wrapper')) return alert("Selecione um PDF primeiro!");
     sigModal.style.display = 'flex';
-    setTimeout(setupCanvas, 300);
+    // Força o ajuste do canvas após o modal aparecer
+    setTimeout(setupCanvas, 200);
 }
 
 function setupCanvas() {
+    const ratio = Math.max(window.devicePixelRatio || 1, 2);
     const rect = sigCanvas.parentElement.getBoundingClientRect();
-    const ratio = window.devicePixelRatio || 1;
+    
+    // Define o tamanho real baseado no espaço disponível na tela (vertical ou horizontal)
     sigCanvas.width = rect.width * ratio;
     sigCanvas.height = rect.height * ratio;
-    sigCanvas.getContext("2d").setTransform(ratio, 0, 0, ratio, 0, 0);
+    sigCanvas.style.width = rect.width + "px";
+    sigCanvas.style.height = rect.height + "px";
+    
+    const ctx = sigCanvas.getContext("2d");
+    ctx.scale(ratio, ratio);
+    
     if (pad) pad.off();
-    pad = new SignaturePad(sigCanvas, { penColor: 'black' });
+    pad = new SignaturePad(sigCanvas, { penColor: 'black', minWidth: 1, maxWidth: 3 });
     pad.clear();
 }
 
-document.getElementById('btn-confirm-sig').onclick = function() {
-    if (!pad || pad.isEmpty()) return alert("Assine primeiro!");
-    sigPreview.src = pad.toDataURL();
-    draggable.style.display = 'block';
-    const firstPage = container.querySelector('.page-wrapper');
-    if (firstPage) {
-        firstPage.appendChild(draggable);
-        draggable.style.left = "50px";
-        draggable.style.top = "50px";
-    }
-    sigModal.style.display = 'none';
-};
-
+function clearSig() { if(pad) pad.clear(); }
 function closeModal() { sigModal.style.display = 'none'; }
+
+document.getElementById('btn-confirm-sig').onclick = function() {
+    if (!pad || pad.isEmpty()) return alert("Assinatura vazia!");
+    const dataUrl = pad.toDataURL();
+    
+    // Proteção contra erro de elemento nulo
+    if (sigPreview) {
+        sigPreview.src = dataUrl;
+        draggable.style.display = 'block';
+        const firstPage = container.querySelector('.page-wrapper');
+        if (firstPage) {
+            firstPage.appendChild(draggable);
+            draggable.style.left = "20px";
+            draggable.style.top = "20px";
+        }
+        closeModal();
+    }
+};
 
 btnDupli.onclick = function(e) {
     e.stopPropagation();
     shouldDuplicate = !shouldDuplicate;
-    this.innerText = shouldDuplicate ? "PÁG: TODAS (ATIVO)" : "PÁG: ÚNICA (INATIVO)";
-    this.style.background = shouldDuplicate ? "#27ae60" : "#3498db";
+    this.innerText = shouldDuplicate ? "PÁG: TODAS (ATIVO)" : "PÁG: ÚNICA (OFF)";
+    this.style.background = shouldDuplicate ? "#27ae60" : "#d35400";
 };
 
-// Arraste e Redimensionamento
+// Logica de Arraste Otimizada
 let isResizing = false;
-draggable.addEventListener("touchstart", (e) => { isResizing = (e.target.id === 'resizer'); });
+draggable.addEventListener("touchstart", (e) => { isResizing = (e.target.id === 'resizer'); }, {passive: true});
 draggable.addEventListener("touchmove", (e) => {
     e.preventDefault();
     const parentPage = draggable.parentElement;
-    if (!parentPage || parentPage === container) return;
+    if (!parentPage) return;
     const rect = parentPage.getBoundingClientRect();
     const touch = e.touches[0];
+
     if (isResizing) {
         const dRect = draggable.getBoundingClientRect();
-        draggable.style.width = Math.max(40, touch.clientX - dRect.left) + "px";
-        draggable.style.height = Math.max(20, touch.clientY - dRect.top) + "px";
+        draggable.style.width = Math.max(50, touch.clientX - dRect.left) + "px";
+        draggable.style.height = Math.max(30, touch.clientY - dRect.top) + "px";
     } else {
         let x = touch.clientX - rect.left - (draggable.offsetWidth / 2);
         let y = touch.clientY - rect.top - (draggable.offsetHeight / 2);
@@ -69,8 +84,9 @@ draggable.addEventListener("touchmove", (e) => {
 document.getElementById('file-in').onchange = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    try {
-        pdfBytes = await file.arrayBuffer();
+    const reader = new FileReader();
+    reader.onload = async function() {
+        pdfBytes = this.result;
         pdfDocJs = await pdfjsLib.getDocument({data: pdfBytes}).promise;
         container.innerHTML = "";
         for (let i = 1; i <= pdfDocJs.numPages; i++) {
@@ -79,39 +95,39 @@ document.getElementById('file-in').onchange = async (e) => {
             wrapper.className = 'page-wrapper';
             const canvas = document.createElement('canvas');
             const viewport = page.getViewport({scale: 1.0});
-            const scale = (container.clientWidth * 0.95) / viewport.width;
+            const scale = (container.clientWidth * 0.98) / viewport.width;
             const vp = page.getViewport({scale});
             canvas.width = vp.width; canvas.height = vp.height;
             await page.render({canvasContext: canvas.getContext('2d'), viewport: vp}).promise;
             wrapper.appendChild(canvas);
             container.appendChild(wrapper);
         }
-    } catch (err) { alert("Erro ao carregar: " + err); }
+    };
+    reader.readAsArrayBuffer(file);
 };
 
-// SALVAR - MÉTODO DE INJEÇÃO SEQUENCIAL (ANTI-FALHA)
+// SALVAMENTO COM LOOP DE SEGURANÇA
 async function savePDF() {
     if(!pdfBytes || !sigPreview.src) return alert("Assine antes de salvar!");
     
     try {
         const doc = await PDFDocument.load(pdfBytes);
         const sigImg = await doc.embedPng(sigPreview.src);
-        const allPages = doc.getPages();
+        const pages = doc.getPages();
         const firstWrapper = container.querySelector('.page-wrapper');
         
+        // Coordenadas proporcionais
         const relX = parseFloat(draggable.style.left) / firstWrapper.offsetWidth;
         const relY = parseFloat(draggable.style.top) / firstWrapper.offsetHeight;
         const relW = draggable.offsetWidth / firstWrapper.offsetWidth;
         const relH = draggable.offsetHeight / firstWrapper.offsetHeight;
 
-        // Se o botão estiver verde (shouldDuplicate), ele assina todas. 
-        // Caso contrário, apenas a primeira (index 0).
-        const targetPages = shouldDuplicate ? allPages : [allPages[0]];
+        const loopLimit = shouldDuplicate ? pages.length : 1;
 
-        // Loop sequencial garantido
-        for (const page of targetPages) {
+        for (let i = 0; i < loopLimit; i++) {
+            const page = pages[i];
             const { width, height } = page.getSize();
-            await page.drawImage(sigImg, {
+            page.drawImage(sigImg, {
                 x: width * relX,
                 y: height - (height * relY) - (height * relH),
                 width: width * relW,
@@ -123,11 +139,9 @@ async function savePDF() {
         const blob = new Blob([bytes], {type: 'application/pdf'});
         const link = document.createElement('a');
         link.href = URL.createObjectURL(blob);
-        link.download = "contrato_assinado.pdf"; 
+        link.download = "PDF_Assinado_Moraes.pdf";
         link.click();
-        
-        console.log("Processo de duplicação finalizado.");
-    } catch (e) {
-        alert("Erro ao processar: " + e.message);
+    } catch (err) {
+        alert("Erro ao gravar PDF: " + err.message);
     }
 }
