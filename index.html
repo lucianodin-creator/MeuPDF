@@ -2,61 +2,61 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>MeuPDF v3.0</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>MeuPDF v3.1</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.0.0/dist/signature_pad.umd.min.js"></script>
     <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
     <style>
-        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-        body { font-family: sans-serif; margin: 0; background: #0b0b0b; color: #fff; height: 100vh; overflow: hidden; display: flex; flex-direction: column; }
-        header { background: #1a1a1a; padding: 12px; display: flex; justify-content: center; gap: 10px; border-bottom: 2px solid #333; }
-        .btn { padding: 12px 18px; border: none; border-radius: 6px; font-weight: bold; color: white; text-transform: uppercase; font-size: 12px; cursor: pointer; }
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; outline: none; }
+        body { font-family: sans-serif; margin: 0; background: #000; color: #fff; height: 100vh; overflow: hidden; display: flex; flex-direction: column; }
+        header { background: #1a1a1a; padding: 10px; display: flex; justify-content: center; gap: 8px; border-bottom: 2px solid #333; }
+        .btn { padding: 12px 15px; border: none; border-radius: 4px; font-weight: bold; color: white; text-transform: uppercase; font-size: 11px; cursor: pointer; }
         
-        #viewer { flex: 1; overflow-y: auto; background: #121212; padding: 20px; display: flex; flex-direction: column; align-items: center; touch-action: pan-y; }
-        .pdf-page-wrapper { position: relative; background: white; margin-bottom: 30px; line-height: 0; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        #viewer { flex: 1; overflow-y: auto; background: #121212; padding: 15px; display: flex; flex-direction: column; align-items: center; -webkit-overflow-scrolling: touch; }
+        .pdf-page-wrapper { position: relative; background: white; margin-bottom: 25px; line-height: 0; box-shadow: 0 5px 20px #000; }
         
-        .sig-box { position: absolute; width: 160px; height: 80px; border: 2px dashed #007bff; background: rgba(0,123,255,0.05); z-index: 10; touch-action: none; }
+        .sig-box { position: absolute; width: 150px; height: 75px; border: 2px dashed #007bff; background: rgba(0,123,255,0.05); z-index: 10; touch-action: none; }
         .sig-box img { width: 100%; height: 100%; pointer-events: none; object-fit: contain; }
-        .resizer { position: absolute; bottom: -15px; right: -15px; width: 35px; height: 35px; background: #007bff; border-radius: 50%; border: 3px solid #fff; z-index: 20; }
+        .resizer { position: absolute; bottom: -12px; right: -12px; width: 30px; height: 30px; background: #007bff; border-radius: 50%; border: 2px solid #fff; z-index: 20; }
 
-        #modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.98); z-index: 2000; flex-direction: column; align-items: center; justify-content: center; }
+        #modal { display: none; position: fixed; inset: 0; background: #000; z-index: 2000; flex-direction: column; align-items: center; justify-content: center; }
         #canvas-wrap { 
             background: white; 
-            width: 94vw; 
+            width: 92vw; 
             max-width: 650px;
             aspect-ratio: 2 / 1; 
             position: relative; 
             border: 4px solid #f39c12; 
             border-radius: 4px;
-            /* O segredo: impede que o navegador roube o toque nas bordas */
-            touch-action: none; 
+            touch-action: none;
+            overflow: hidden;
         }
-        #sig-canvas { width: 100%; height: 100%; touch-action: none; }
+        #sig-canvas { width: 100%; height: 100%; cursor: crosshair; }
         
-        .footer-tools { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); display: none; z-index: 150; background: #1a1a1a; padding: 15px; border-radius: 15px; border: 1px solid #444; }
+        .footer-tools { position: fixed; bottom: 15px; left: 50%; transform: translateX(-50%); display: none; z-index: 150; background: #1a1a1a; padding: 12px; border-radius: 12px; border: 1px solid #444; }
     </style>
 </head>
 <body>
     <header>
         <input type="file" id="pdf-in" style="display:none" accept="application/pdf">
-        <button class="btn" style="background:#3498db" onclick="document.getElementById('pdf-in').click()">1. ABRIR</button>
-        <button class="btn" style="background:#e67e22" onclick="openModal()">2. ASSINAR</button>
+        <button class="btn" style="background:#007bff" onclick="document.getElementById('pdf-in').click()">ABRIR PDF</button>
+        <button class="btn" style="background:#f39c12" onclick="openModal()">ASSINAR</button>
     </header>
 
     <div id="viewer"></div>
 
     <div class="footer-tools" id="final-tools">
-        <button class="btn" style="background:#27ae60" onclick="saveFinalPdf()">GERAR PDF ASSINADO</button>
+        <button class="btn" style="background:#28a745" onclick="saveFinalPdf()">FINALIZAR PDF</button>
     </div>
 
     <div id="modal">
-        <div style="margin-bottom:12px; color:#f39c12; font-weight:bold; font-size:14px;">ASSINATURA PROTEGIDA - NÃO APAGA NAS BORDAS</div>
+        <div style="margin-bottom:10px; color:#f39c12; font-weight:bold; font-size:12px;">MODO SEGURO ATIVADO - ASSINE ABAIXO</div>
         <div id="canvas-wrap"><canvas id="sig-canvas"></canvas></div>
-        <div style="margin-top:20px; display:flex; gap:15px;">
-            <button class="btn" style="background:#2ecc71; min-width:100px;" onclick="applySignatureToAll()">OK</button>
-            <button class="btn" style="background:#e74c3c" onclick="pad.clear()">LIMPAR</button>
-            <button class="btn" style="background:#95a5a6" onclick="closeModal()">VOLTAR</button>
+        <div style="margin-top:15px; display:flex; gap:12px;">
+            <button class="btn" style="background:#28a745; min-width:90px;" onclick="applySignatureToAll()">OK</button>
+            <button class="btn" style="background:#dc3545" onclick="pad.clear()">LIMPAR</button>
+            <button class="btn" style="background:#6c757d" onclick="closeModal()">SAIR</button>
         </div>
     </div>
 
@@ -68,7 +68,7 @@
         function openModal() {
             if (!document.getElementById('viewer').hasChildNodes()) return alert("Abra o PDF!");
             document.getElementById('modal').style.display = 'flex';
-            setupCanvas();
+            setTimeout(setupCanvas, 50); // Delay para o Chrome recalcular o layout
         }
 
         function setupCanvas() {
@@ -82,13 +82,11 @@
             ctx.scale(dpr, dpr);
             
             if (pad) pad.off();
-            // penColor azul caneta real
             pad = new SignaturePad(c, { 
                 penColor: "rgb(0, 50, 150)", 
                 minWidth: 1.5, 
-                maxWidth: 4.0,
-                // Mantém o traço mesmo se o toque sair da área e voltar
-                velocityFilterWeight: 0.6
+                maxWidth: 3.8,
+                throttle: 16 // Melhora performance no Motorola
             });
         }
 
@@ -107,25 +105,23 @@
                 
                 box.addEventListener("touchmove", (e) => {
                     if(e.target.classList.contains('resizer')) return;
+                    e.preventDefault();
                     const r = page.getBoundingClientRect();
                     const t = e.touches[0];
-                    // Proteção de borda no movimento
-                    let x = t.clientX - r.left - (box.offsetWidth/2);
-                    let y = t.clientY - r.top - (box.offsetHeight/2);
-                    box.style.left = x + "px";
-                    box.style.top = y + "px";
-                });
+                    box.style.left = (t.clientX - r.left - (box.offsetWidth/2)) + "px";
+                    box.style.top = (t.clientY - r.top - (box.offsetHeight/2)) + "px";
+                }, {passive: false});
 
                 box.querySelector('.resizer').addEventListener("touchmove", (e) => {
-                    e.stopPropagation();
+                    e.stopPropagation(); e.preventDefault();
                     const t = e.touches[0];
                     const r = box.getBoundingClientRect();
                     const newW = t.clientX - r.left;
-                    if (newW > 50 && newW < 400) {
+                    if (newW > 40 && newW < 350) {
                         box.style.width = newW + "px";
                         box.style.height = (newW * 0.5) + "px";
                     }
-                });
+                }, {passive: false});
                 page.appendChild(box);
             });
             document.getElementById('final-tools').style.display = 'block';
@@ -141,7 +137,7 @@
                 const p = await pdf.getPage(i);
                 const w = document.createElement('div'); w.className = 'pdf-page-wrapper';
                 const c = document.createElement('canvas');
-                const vp = p.getViewport({scale: (view.clientWidth * 0.9) / p.getViewport({scale:1}).width});
+                const vp = p.getViewport({scale: (view.clientWidth * 0.95) / p.getViewport({scale:1}).width});
                 c.width = vp.width; c.height = vp.height;
                 await p.render({canvasContext: c.getContext('2d'), viewport: vp}).promise;
                 w.appendChild(c); view.appendChild(w);
@@ -168,7 +164,7 @@
             const bytes = await doc.save();
             const link = document.createElement('a');
             link.href = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
-            link.download = `Contrato_Final.pdf`;
+            link.download = "PDF_Assinado_Luciano.pdf";
             link.click();
         }
     </script>
