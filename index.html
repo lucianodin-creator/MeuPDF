@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>MeuPDF v2.7</title>
+    <title>MeuPDF v2.8</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.0.0/dist/signature_pad.umd.min.js"></script>
     <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
@@ -18,18 +18,19 @@
         
         .sig-box { position: absolute; width: 150px; height: 70px; border: 2px dashed #007bff; background: rgba(0,123,255,0.05); z-index: 10; touch-action: none; }
         .sig-box img { width: 100%; height: 100%; pointer-events: none; object-fit: contain; }
-        .resizer { position: absolute; bottom: -12px; right: -12px; width: 30px; height: 30px; background: #007bff; border-radius: 50%; border: 2px solid #fff; z-index: 20; }
+        .resizer { position: absolute; bottom: -12px; right: -12px; width: 32px; height: 32px; background: #007bff; border-radius: 50%; border: 2px solid #fff; z-index: 20; }
 
-        /* MODAL ADAPTADO AO NAVEGADOR */
-        #modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.9); z-index: 2000; flex-direction: column; align-items: center; justify-content: center; }
+        #modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.95); z-index: 2000; flex-direction: column; align-items: center; justify-content: center; }
+        
+        /* AREA BRANCA COM PROPORÇÃO FIXA PARA NÃO ESMAGAR */
         #canvas-wrap { 
             background: white; 
-            width: 90vw; /* Deixa 5% de margem em cada lado */
-            height: 70vh; /* Deixa espaço para os botões sem rolar */
+            width: 92vw; 
+            max-width: 600px;
+            aspect-ratio: 2 / 1; /* Mantém sempre o dobro da largura pela altura */
             position: relative; 
-            border: 4px solid #f39c12; 
-            border-radius: 8px;
-            box-shadow: 0 0 20px rgba(243,156,18,0.5);
+            border: 5px solid #f39c12; 
+            border-radius: 4px;
         }
         #sig-canvas { width: 100%; height: 100%; touch-action: none; }
         
@@ -50,7 +51,7 @@
     </div>
 
     <div id="modal">
-        <div style="margin-bottom:10px; color:#f39c12; font-weight:bold;">ASSINE DENTRO DO QUADRO LARANJA</div>
+        <div id="msg" style="margin-bottom:10px; color:#f39c12; font-weight:bold;">ASSINE NO QUADRO ABAIXO</div>
         <div id="canvas-wrap"><canvas id="sig-canvas"></canvas></div>
         <div style="margin-top:15px; display:flex; gap:15px;">
             <button class="btn" style="background:#28a745; width:120px;" onclick="applySignatureToAll()">OK</button>
@@ -68,25 +69,25 @@
         function openModal() {
             if (!view.hasChildNodes()) return alert("Abra o PDF!");
             document.getElementById('modal').style.display = 'flex';
-            
-            // Força o ajuste do canvas ao tamanho real do wrap (que é 90% da tela)
+            setupCanvas();
+        }
+
+        function setupCanvas() {
             const c = document.getElementById('sig-canvas');
             const wrap = document.getElementById('canvas-wrap');
             const dpr = window.devicePixelRatio || 1;
-            
             c.width = wrap.offsetWidth * dpr;
             c.height = wrap.offsetHeight * dpr;
-            const ctx = c.getContext("2d");
-            ctx.setTransform(1, 0, 0, 1, 0, 0);
-            ctx.scale(dpr, dpr);
-            
+            c.getContext("2d").setTransform(1,0,0,1,0,0);
+            c.getContext("2d").scale(dpr, dpr);
             if (pad) pad.off();
-            pad = new SignaturePad(c, { 
-                minWidth: 1.5, 
-                maxWidth: 4,
-                velocityFilterWeight: 0.7 
-            });
+            pad = new SignaturePad(c, { minWidth: 1.8, maxWidth: 4.5 });
         }
+
+        // REAJUSTA SE VIRAR O CELULAR COM O MODAL ABERTO
+        window.addEventListener('resize', () => {
+            if(document.getElementById('modal').style.display === 'flex') setupCanvas();
+        });
 
         function closeModal() { document.getElementById('modal').style.display = 'none'; }
 
@@ -97,7 +98,6 @@
             pages.forEach(page => {
                 const old = page.querySelector('.sig-box');
                 if(old) old.remove();
-
                 const box = document.createElement('div');
                 box.className = 'sig-box';
                 box.style.left = "20px"; box.style.top = "20px";
@@ -116,9 +116,9 @@
                     const t = e.touches[0];
                     const r = box.getBoundingClientRect();
                     const newW = t.clientX - r.left;
-                    if (newW > 40 && newW < 400) {
+                    if (newW > 40 && newW < 450) {
                         box.style.width = newW + "px";
-                        box.style.height = (newW * 0.46) + "px";
+                        box.style.height = (newW * 0.5) + "px";
                     }
                 });
                 page.appendChild(box);
@@ -147,31 +147,23 @@
             const doc = await PDFDocument.load(pdfData);
             const sigPng = await doc.embedPng(sigBase64);
             const pdfPages = doc.getPages();
-            const htmlPages = document.querySelectorAll('.pdf-page-wrapper');
-
-            htmlPages.forEach((htmlPage, i) => {
+            document.querySelectorAll('.pdf-page-wrapper').forEach((htmlPage, i) => {
                 const box = htmlPage.querySelector('.sig-box');
                 if (box) {
                     const p = pdfPages[i];
                     const { width, height } = p.getSize();
-                    const rx = parseFloat(box.style.left) / htmlPage.offsetWidth;
-                    const ry = parseFloat(box.style.top) / htmlPage.offsetHeight;
-                    const rw = box.offsetWidth / htmlPage.offsetWidth;
-                    const rh = box.offsetHeight / htmlPage.offsetHeight;
-
                     p.drawImage(sigPng, {
-                        x: width * rx,
-                        y: height - (height * ry) - (height * rh),
-                        width: width * rw, height: height * rh
+                        x: width * (parseFloat(box.style.left) / htmlPage.offsetWidth),
+                        y: height - (height * (parseFloat(box.style.top) / htmlPage.offsetHeight)) - (height * (box.offsetHeight / htmlPage.offsetHeight)),
+                        width: width * (box.offsetWidth / htmlPage.offsetWidth), 
+                        height: height * (box.offsetHeight / htmlPage.offsetHeight)
                     });
                 }
             });
-
             const bytes = await doc.save();
-            const blob = new Blob([bytes], { type: 'application/pdf' });
             const link = document.createElement('a');
-            link.href = URL.createObjectURL(blob);
-            link.download = "PDF_Assinado_Luciano.pdf";
+            link.href = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
+            link.download = "PDF_Final_Luciano.pdf";
             link.click();
         }
     </script>
