@@ -3,80 +3,82 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>MeuPDF - Edição Livre</title>
+    <title>MeuPDF - Edição Pro</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.0.0/dist/signature_pad.umd.min.js"></script>
     <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
     <style>
-        body { font-family: sans-serif; margin: 0; padding: 0; background: #121212; color: white; display: flex; flex-direction: column; align-items: center; }
-        #toolbar { background: #1e1e1e; padding: 10px; width: 100%; display: flex; justify-content: center; gap: 8px; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 10px rgba(0,0,0,0.5); }
+        body { font-family: sans-serif; margin: 0; padding: 0; background: #e0e0e0; color: #333; display: flex; flex-direction: column; align-items: center; }
         
-        /* Permitir ver todas as folhas */
-        #pdf-main-container { width: 100%; display: flex; flex-direction: column; align-items: center; overflow-y: auto; height: calc(100vh - 60px); }
-        #pdf-wrapper { position: relative; margin: 20px 0; background: white; box-shadow: 0 0 20px rgba(0,0,0,0.5); line-height: 0; }
+        #toolbar { background: #2c3e50; padding: 12px; width: 100%; display: flex; justify-content: center; gap: 10px; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 5px rgba(0,0,0,0.2); }
+        
+        /* Botões com cores distintas */
+        .btn { padding: 10px 15px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; color: white; font-size: 14px; }
+        .btn-open { background: #2980b9; }    /* Azul */
+        .btn-sign { background: #e67e22; }    /* Laranja */
+        .btn-save { background: #27ae60; }    /* Verde */
+
+        #pdf-main-container { width: 100%; display: flex; flex-direction: column; align-items: center; overflow-y: auto; height: calc(100vh - 70px); padding-bottom: 50px; }
+        
+        #pdf-wrapper { position: relative; margin: 20px 0; background: white; box-shadow: 0 4px 15px rgba(0,0,0,0.15); line-height: 0; }
         canvas { max-width: 100%; height: auto; }
         
-        /* Janela de Assinatura com Redimensionamento Manual */
+        /* Janela de Assinatura */
         #draggable-sig {
-            position: absolute; width: 150px; min-width: 50px; min-height: 30px;
-            display: none; border: 2px dashed #2196F3; background: rgba(33, 150, 243, 0.1); 
-            touch-action: none; z-index: 999; resize: both; overflow: visible;
+            position: absolute; width: 150px; height: 60px; display: none; 
+            border: 2px dashed #2980b9; background: rgba(41, 128, 185, 0.1); 
+            touch-action: none; z-index: 999;
         }
         
-        /* Ícone de Duplicar (Duas folhas) */
+        /* Botão Duplicar (Folhas) */
         #btn-duplicate {
-            position: absolute; top: -35px; right: 0; background: #2196F3; color: white;
-            border: none; border-radius: 4px; padding: 5px; cursor: pointer; display: flex; align-items: center;
+            position: absolute; top: -35px; left: 0; background: #2980b9; color: white;
+            border: none; border-radius: 4px; padding: 6px; cursor: pointer; display: flex;
         }
 
-        /* Triângulo de Redimensionamento no Canto */
-        #draggable-sig::after {
-            content: ""; position: absolute; bottom: 0; right: 0;
-            width: 0; height: 0; border-style: solid;
-            border-width: 0 0 15px 15px; border-color: transparent transparent #2196F3 transparent;
-            cursor: nwse-resize; pointer-events: none;
+        /* O Triângulo de Redimensionar (Pega-fácil) */
+        #resizer {
+            position: absolute; bottom: -5px; right: -5px; width: 25px; height: 25px;
+            background: #2980b9; clip-path: polygon(100% 0, 100% 100%, 0 100%);
+            cursor: nwse-resize; touch-action: none; z-index: 1001;
         }
 
         #sig-modal {
             display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.9); z-index: 2000; justify-content: center; align-items: center; flex-direction: column;
+            background: rgba(0,0,0,0.85); z-index: 2000; justify-content: center; align-items: center; flex-direction: column;
         }
-        #sig-canvas { background: white; border-radius: 8px; width: 90%; height: 50%; max-width: 800px; touch-action: none; }
-        .btn { padding: 12px 18px; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; }
-        .btn-success { background: #4CAF50; color: white; }
+        #sig-canvas { background: white; border-radius: 8px; width: 90%; height: 45%; touch-action: none; }
     </style>
 </head>
 <body>
     <div id="toolbar">
         <input type="file" id="file-in" accept="application/pdf" style="display:none">
-        <button class="btn btn-success" onclick="document.getElementById('file-in').click()">Abrir PDF</button>
-        <button class="btn btn-success" style="background:#2196F3" onclick="openSignature()">Assinar</button>
-        <button class="btn btn-success" onclick="savePDF()">Salvar PDF</button>
+        <button class="btn btn-open" onclick="document.getElementById('file-in').click()">Abrir PDF</button>
+        <button class="btn btn-sign" onclick="openSignature()">Assinar</button>
+        <button class="btn btn-save" onclick="savePDF()">Salvar PDF</button>
     </div>
 
     <div id="pdf-main-container">
         <div id="pdf-wrapper">
             <canvas id="pdf-render"></canvas>
             <div id="draggable-sig">
-                <button id="btn-duplicate" onclick="duplicateSig()" title="Duplicar em todas as folhas">
-                    <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
-                        <path d="M13 0H6a2 2 0 0 0-2 2 2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h7a2 2 0 0 0 2-2 2 2 0 0 0 2-2V2a2 2 0 0 0-2-2zM6 1h7a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1z"/>
-                    </svg>
+                <button id="btn-duplicate" onclick="duplicateSig()">
+                    <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M13 0H6a2 2 0 0 0-2 2 2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h7a2 2 0 0 0 2-2 2 2 0 0 0 2-2V2a2 2 0 0 0-2-2zM6 1h7a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1z"/></svg>
                 </button>
                 <img id="sig-preview" style="width: 100%; height: 100%; pointer-events: none; object-fit: contain;">
+                <div id="resizer"></div>
             </div>
         </div>
     </div>
 
     <div id="sig-modal">
-        <h3>Assine com o celular deitado para mais espaço</h3>
+        <h3 style="color:white">Assine no espaço branco</h3>
         <canvas id="sig-canvas"></canvas>
-        <div style="margin-top: 15px; display: flex; gap: 15px;">
-            <button class="btn btn-success" onclick="applySignature()">Confirmar</button>
-            <button class="btn" style="background:#f44336; color:white;" onclick="closeModal()">Sair</button>
+        <div style="margin-top: 20px; display: flex; gap: 15px;">
+            <button class="btn btn-save" onclick="applySignature()">Confirmar</button>
+            <button class="btn" style="background:#c0392b" onclick="closeModal()">Sair</button>
         </div>
     </div>
-
     <script src="script.js"></script>
 </body>
 </html>

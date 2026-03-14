@@ -1,15 +1,9 @@
 const { PDFDocument } = PDFLib;
-let pdfBytes, pdfDocJs, pageNum = 1, pad = null;
-let pctX = 0, pctY = 0;
-let shouldDuplicate = false;
+let pdfBytes, pdfDocJs, pad = null;
+let pctX = 0, pctY = 0, shouldDuplicate = false;
 
 const sigModal = document.getElementById('sig-modal'), sigCanvas = document.getElementById('sig-canvas');
-const draggable = document.getElementById('draggable-sig');
-
-// Reajusta o canvas quando vira o celular
-window.addEventListener("orientationchange", () => {
-    if(sigModal.style.display === 'flex') setTimeout(resizeCanvas, 300);
-});
+const draggable = document.getElementById('draggable-sig'), resizer = document.getElementById('resizer');
 
 function openSignature() {
     if (!pdfBytes) { alert("Selecione seu PDF!"); return; }
@@ -30,7 +24,7 @@ function applySignature() {
     if(pad.isEmpty()) return;
     document.getElementById('sig-preview').src = pad.toDataURL();
     draggable.style.display = 'block';
-    draggable.style.left = "0px"; draggable.style.top = "0px";
+    draggable.style.left = "20px"; draggable.style.top = "20px";
     sigModal.style.display = 'none';
 }
 
@@ -38,14 +32,12 @@ function closeModal() { sigModal.style.display = 'none'; }
 
 function duplicateSig() {
     shouldDuplicate = !shouldDuplicate;
-    const btn = document.getElementById('btn-duplicate');
-    btn.style.background = shouldDuplicate ? "#4CAF50" : "#2196F3";
-    alert(shouldDuplicate ? "Assinatura será copiada para todas as folhas!" : "Assinatura apenas nesta folha.");
+    document.getElementById('btn-duplicate').style.background = shouldDuplicate ? "#27ae60" : "#2980b9";
 }
 
-// Arraste suave
+// LÓGICA DE ARRASTAR (No corpo da caixa)
 draggable.addEventListener("touchmove", (e) => {
-    if (e.target.id === 'btn-duplicate') return;
+    if (e.target.id === 'resizer' || e.target.closest('#btn-duplicate')) return;
     e.preventDefault();
     const touch = e.touches[0];
     const wrapper = document.getElementById('pdf-wrapper');
@@ -59,9 +51,21 @@ draggable.addEventListener("touchmove", (e) => {
 
     draggable.style.left = x + "px";
     draggable.style.top = y + "px";
-
     pctX = (x + (draggable.offsetWidth / 2)) / rect.width;
     pctY = (y + (draggable.offsetHeight / 2)) / rect.height;
+}, { passive: false });
+
+// LÓGICA DE REDIMENSIONAR (Apenas no Triângulo)
+resizer.addEventListener("touchmove", (e) => {
+    e.preventDefault();
+    const touch = e.touches[0];
+    const rect = draggable.getBoundingClientRect();
+    
+    let newWidth = touch.clientX - rect.left;
+    let newHeight = touch.clientY - rect.top;
+
+    if (newWidth > 50) draggable.style.width = newWidth + "px";
+    if (newHeight > 30) draggable.style.height = newHeight + "px";
 }, { passive: false });
 
 async function savePDF() {
@@ -70,15 +74,15 @@ async function savePDF() {
     const allPages = doc.getPages();
     const pagesToSign = shouldDuplicate ? allPages : [allPages[0]];
     const sigImg = await doc.embedPng(document.getElementById('sig-preview').src);
-
     const wrapper = document.getElementById('pdf-wrapper');
-    // Pega o tamanho atual da janela azul em relação ao PDF na tela
-    const currentW = (draggable.offsetWidth / wrapper.offsetWidth);
-    
+
+    const relW = draggable.offsetWidth / wrapper.offsetWidth;
+    const relH = draggable.offsetHeight / wrapper.offsetHeight;
+
     pagesToSign.forEach(page => {
         const { width, height } = page.getSize();
-        const finalW = width * currentW;
-        const finalH = (sigImg.height / sigImg.width) * finalW;
+        const finalW = width * relW;
+        const finalH = height * relH;
 
         page.drawImage(sigImg, {
             x: (width * pctX) - (finalW / 2),
@@ -88,9 +92,8 @@ async function savePDF() {
     });
 
     const savedBytes = await doc.save();
-    const blob = new Blob([savedBytes], { type: 'application/pdf' });
     const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
+    link.href = URL.createObjectURL(new Blob([savedBytes], { type: 'application/pdf' }));
     link.download = "contrato_assinado.pdf";
     link.click();
 }
@@ -104,7 +107,7 @@ document.getElementById('file-in').onchange = async (e) => {
 };
 
 async function render() {
-    const page = await pdfDocJs.getPage(pageNum);
+    const page = await pdfDocJs.getPage(1);
     const canvas = document.getElementById('pdf-render');
     const vp = page.getViewport({scale: 1.5});
     canvas.width = vp.width; canvas.height = vp.height;
