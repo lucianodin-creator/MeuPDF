@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes, viewport-fit=cover">
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-    <title>MeuPDF v4.3</title>
+    <title>MeuPDF v4.4</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.0.0/dist/signature_pad.umd.min.js"></script>
     <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
@@ -12,7 +12,7 @@
         * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
         body { font-family: sans-serif; margin: 0; background: #000; color: #fff; height: 100vh; overflow: hidden; }
         #screen-pdf, #screen-sign { position: absolute; inset: 0; display: flex; flex-direction: column; }
-        #screen-sign { display: none; background: #444; z-index: 2000; overflow: auto; }
+        #screen-sign { display: none; background: #333; z-index: 2000; overflow: auto; }
 
         header { background: #1a1a1a; padding: 10px; display: flex; justify-content: center; gap: 10px; border-bottom: 2px solid #333; flex-shrink: 0; }
         .btn { padding: 12px 18px; border: none; border-radius: 6px; font-weight: bold; color: white; text-transform: uppercase; font-size: 11px; cursor: pointer; }
@@ -25,9 +25,9 @@
         .resizer { position: absolute; bottom: -8px; right: -8px; width: 22px; height: 22px; background: #007bff; border-radius: 50%; border: 2px solid #fff; }
 
         .sign-header { background: #f39c12; color: #000; padding: 10px; text-align: center; font-weight: bold; font-size: 12px; position: sticky; top: 0; z-index: 10; }
-        #canvas-container { flex: 1; display: flex; align-items: center; justify-content: center; padding: 60px 20px; min-height: 400px; }
-        #canvas-wrapper { background: #fff; width: 100%; max-width: 500px; aspect-ratio: 2.5 / 1; box-shadow: 0 10px 40px rgba(0,0,0,0.5); position: relative; }
-        canvas#sig-canvas { width: 100%; height: 100%; display: block; touch-action: none; cursor: crosshair; }
+        #canvas-container { flex: 1; display: flex; align-items: center; justify-content: center; padding: 50px 20px; min-height: 400px; }
+        #canvas-wrapper { background: #fff; width: 100%; max-width: 500px; aspect-ratio: 2.5 / 1; box-shadow: 0 10px 40px #000; position: relative; }
+        canvas#sig-canvas { width: 100%; height: 100%; display: block; touch-action: none; }
         
         .sign-footer { background: #1a1a1a; padding: 15px; display: flex; justify-content: center; gap: 15px; position: sticky; bottom: 0; z-index: 10; }
         .footer-tools { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); display: none; z-index: 100; }
@@ -45,7 +45,7 @@
     </div>
 
     <div id="screen-sign">
-        <div class="sign-header">PREVISÃO ATIVADA - TOQUE REAL</div>
+        <div class="sign-header">ALINHAMENTO DINÂMICO ATIVADO</div>
         <div id="canvas-container">
             <div id="canvas-wrapper">
                 <canvas id="sig-canvas"></canvas>
@@ -83,7 +83,6 @@
 
             if (pad) pad.off();
             
-            // SignaturePad atualizado para capturar coordenadas absolutas
             pad = new SignaturePad(c, { 
                 penColor: "rgb(0, 40, 120)", 
                 minWidth: 0.5, 
@@ -91,22 +90,22 @@
                 velocityFilterWeight: 0.7
             });
 
-            // MÉTODO DE CORREÇÃO DE OFFSET PARA ZOOM E SCROLL
-            pad._fromMouseEvent = function(event) {
+            // NOVA LÓGICA: Sincronização em tempo real de coordenadas
+            const originalHandler = pad._handlePointerEvents.bind(pad);
+            pad._handlePointerEvents = function(event) {
                 const rect = c.getBoundingClientRect();
-                return {
-                    x: (event.clientX - rect.left) * (c.width / rect.width / ratio),
-                    y: (event.clientY - rect.top) * (c.height / rect.height / ratio)
-                };
-            };
-
-            pad._fromTouchEvent = function(event) {
-                const rect = c.getBoundingClientRect();
-                const touch = event.touches[0];
-                return {
-                    x: (touch.clientX - rect.left) * (c.width / rect.width / ratio),
-                    y: (touch.clientY - rect.top) * (c.height / rect.height / ratio)
-                };
+                const clientX = event.clientX || (event.touches && event.touches[0].clientX);
+                const clientY = event.clientY || (event.touches && event.touches[0].clientY);
+                
+                // Calcula a posição proporcional exata, eliminando o erro que cresce para a direita
+                const x = (clientX - rect.left) * (c.width / rect.width / ratio);
+                const y = (clientY - rect.top) * (c.height / rect.height / ratio);
+                
+                // Injeta as coordenadas corrigidas diretamente no motor do SignaturePad
+                const point = { x, y, time: Date.now() };
+                if (event.type.includes('start')) pad._strokeBegin(point);
+                else if (event.type.includes('move')) pad._strokeUpdate(point);
+                else if (event.type.includes('end')) pad._strokeEnd(point);
             };
         }
 
@@ -118,7 +117,7 @@
                 const old = page.querySelector('.sig-box'); if(old) old.remove();
                 const box = document.createElement('div');
                 box.className = 'sig-box';
-                box.style.left = "50px"; box.style.top = "50px";
+                box.style.left = "40px"; box.style.top = "40px";
                 box.innerHTML = `<img src="${sigBase64}"><div class="resizer"></div>`;
                 box.addEventListener("touchmove", (e) => {
                     if(e.target.classList.contains('resizer')) return;
