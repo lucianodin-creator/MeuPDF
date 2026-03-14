@@ -1,4 +1,5 @@
 const { PDFDocument } = PDFLib;
+// Correção para Firefox: Garantir que o worker seja carregado
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
 
 let pdfBytes, pdfDocJs, pad = null;
@@ -7,14 +8,16 @@ let pctX = 0, pctY = 0, shouldDuplicate = false;
 const sigModal = document.getElementById('sig-modal'), sigCanvas = document.getElementById('sig-canvas');
 const container = document.getElementById('pdf-main-container');
 
-// Cria a janela de assinatura flutuante
+// Elemento da assinatura
 const draggable = document.createElement('div');
 draggable.id = 'draggable-sig';
-draggable.innerHTML = `<button id="btn-duplicate" onclick="duplicateSig()"><svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M13 0H6a2 2 0 0 0-2 2 2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h7a2 2 0 0 0 2-2 2 2 0 0 0 2-2V2a2 2 0 0 0-2-2zM6 1h7a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1z"/></svg></button>
-<img id="sig-preview" style="width:100%; height:100%; pointer-events:none; object-fit:contain;"><div id="resizer"></div>`;
+draggable.innerHTML = `
+    <button id="btn-duplicate"><svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M13 0H6a2 2 0 0 0-2 2 2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h7a2 2 0 0 0 2-2 2 2 0 0 0 2-2V2a2 2 0 0 0-2-2zM6 1h7a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1z"/></svg></button>
+    <img id="sig-preview" style="width:100%; height:100%; pointer-events:none; object-fit:contain;">
+    <div id="resizer"></div>`;
 
 function openSignature() {
-    if (!pdfBytes) return alert("Abra um PDF primeiro!");
+    if (!pdfBytes) return alert("Por favor, abra um PDF primeiro.");
     sigModal.style.display = 'flex';
     setTimeout(setupCanvas, 200);
 }
@@ -28,80 +31,91 @@ function setupCanvas() {
     pad.clear();
 }
 
-// Detecta mudança de rotação para reajustar a área de assinatura
-window.addEventListener("resize", () => {
-    if (sigModal.style.display === 'flex') setupCanvas();
-});
+window.addEventListener("resize", () => { if (sigModal.style.display === 'flex') setupCanvas(); });
 
-function applySignature() {
-    if (pad.isEmpty()) return;
+// Botão Confirmar (Melhorado para Chrome)
+document.getElementById('btn-confirm-sig').onclick = function() {
+    if (!pad || pad.isEmpty()) return alert("Assine antes de confirmar!");
     const dataUrl = pad.toDataURL();
     document.getElementById('sig-preview').src = dataUrl;
     const firstPage = document.querySelector('.page-wrapper');
-    firstPage.appendChild(draggable);
-    draggable.style.display = 'block';
-    draggable.style.left = "20px"; draggable.style.top = "20px";
+    if(firstPage) {
+        firstPage.appendChild(draggable);
+        draggable.style.display = 'block';
+        draggable.style.left = "20px"; draggable.style.top = "20px";
+    }
     sigModal.style.display = 'none';
-}
+};
 
 function closeModal() { sigModal.style.display = 'none'; }
 
-function duplicateSig() {
+// Botão Duplicar
+draggable.querySelector('#btn-duplicate').onclick = function(e) {
+    e.stopPropagation();
     shouldDuplicate = !shouldDuplicate;
-    document.getElementById('btn-duplicate').style.background = shouldDuplicate ? "#27ae60" : "#2980b9";
-}
+    this.style.background = shouldDuplicate ? "#27ae60" : "#2980b9";
+};
 
-// Lógica de Arrastar e Redimensionar
+// Arraste e Redimensionamento
 let isResizing = false;
-draggable.addEventListener("touchstart", (e) => { if(e.target.id === 'resizer') isResizing = true; else isResizing = false; });
+draggable.addEventListener("touchstart", (e) => { isResizing = (e.target.id === 'resizer'); });
 
 draggable.addEventListener("touchmove", (e) => {
     e.preventDefault();
     const touch = e.touches[0];
     const wrapper = draggable.parentElement;
+    if(!wrapper) return;
     const rect = wrapper.getBoundingClientRect();
 
     if (isResizing) {
         const dRect = draggable.getBoundingClientRect();
-        draggable.style.width = (touch.clientX - dRect.left) + "px";
-        draggable.style.height = (touch.clientY - dRect.top) + "px";
+        draggable.style.width = Math.max(50, touch.clientX - dRect.left) + "px";
+        draggable.style.height = Math.max(30, touch.clientY - dRect.top) + "px";
     } else {
         let x = touch.clientX - rect.left - (draggable.offsetWidth / 2);
         let y = touch.clientY - rect.top - (draggable.offsetHeight / 2);
         draggable.style.left = Math.max(0, Math.min(x, rect.width - draggable.offsetWidth)) + "px";
         draggable.style.top = Math.max(0, Math.min(y, rect.height - draggable.offsetHeight)) + "px";
-        pctX = (parseInt(draggable.style.left) + (draggable.offsetWidth / 2)) / rect.width;
-        pctY = (parseInt(draggable.style.top) + (draggable.offsetHeight / 2)) / rect.height;
     }
+    pctX = (parseInt(draggable.style.left) + (draggable.offsetWidth / 2)) / rect.width;
+    pctY = (parseInt(draggable.style.top) + (draggable.offsetHeight / 2)) / rect.height;
 }, { passive: false });
 
+// Abrir PDF (Correção para Firefox)
 document.getElementById('file-in').onchange = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    pdfBytes = await file.arrayBuffer();
-    pdfDocJs = await pdfjsLib.getDocument({data: pdfBytes}).promise;
-    container.innerHTML = "";
-    for (let i = 1; i <= pdfDocJs.numPages; i++) {
-        const page = await pdfDocJs.getPage(i);
-        const wrapper = document.createElement('div');
-        wrapper.className = 'page-wrapper';
-        const canvas = document.createElement('canvas');
-        const vp = page.getViewport({scale: 1.2});
-        canvas.width = vp.width; canvas.height = vp.height;
-        await page.render({canvasContext: canvas.getContext('2d'), viewport: vp}).promise;
-        wrapper.appendChild(canvas);
-        container.appendChild(wrapper);
+    try {
+        pdfBytes = await file.arrayBuffer();
+        const loadingTask = pdfjsLib.getDocument({data: pdfBytes});
+        pdfDocJs = await loadingTask.promise;
+        container.innerHTML = "";
+        for (let i = 1; i <= pdfDocJs.numPages; i++) {
+            const page = await pdfDocJs.getPage(i);
+            const wrapper = document.createElement('div');
+            wrapper.className = 'page-wrapper';
+            const canvas = document.createElement('canvas');
+            const vp = page.getViewport({scale: 1.0}); // Escala padrão
+            canvas.width = vp.width; canvas.height = vp.height;
+            await page.render({canvasContext: canvas.getContext('2d'), viewport: vp}).promise;
+            wrapper.appendChild(canvas);
+            container.appendChild(wrapper);
+        }
+    } catch (err) {
+        alert("Erro ao carregar PDF: " + err.message);
     }
 };
 
 async function savePDF() {
+    if(!pdfBytes) return;
     const doc = await PDFDocument.load(pdfBytes);
     const sigImg = await doc.embedPng(document.getElementById('sig-preview').src);
-    const pages = shouldDuplicate ? doc.getPages() : [doc.getPages()[0]];
+    const allPages = doc.getPages();
+    const pagesToSign = shouldDuplicate ? allPages : [allPages[0]];
     const refRect = document.querySelector('.page-wrapper').getBoundingClientRect();
     const relW = draggable.offsetWidth / refRect.width, relH = draggable.offsetHeight / refRect.height;
 
-    pages.forEach(page => {
+    pagesToSign.forEach(page => {
         const { width, height } = page.getSize();
         const finalW = width * relW, finalH = height * relH;
         page.drawImage(sigImg, {
@@ -113,5 +127,5 @@ async function savePDF() {
     const bytes = await doc.save();
     const link = document.createElement('a');
     link.href = URL.createObjectURL(new Blob([bytes], {type: 'application/pdf'}));
-    link.download = "contrato_assinado.pdf"; link.click();
+    link.download = "assinado.pdf"; link.click();
 }
