@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Assinador v5.13</title>
+    <title>Assinador v5.14</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.0.0/dist/signature_pad.umd.min.js"></script>
     <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
@@ -18,8 +18,8 @@
         .sig-box img { width: 100%; height: 100%; pointer-events: none; }
         .resizer { position: absolute; bottom: 0; right: 0; width: 35px; height: 35px; background: #3498db; clip-path: polygon(100% 0, 0% 100%, 100% 100%); }
         #screen-sign { position: fixed; inset: 0; background: #1a1a1a; z-index: 9999; display: none; flex-direction: column; }
-        #canvas-container { flex: 1; width: 95vw; margin: 10px auto; background: #fff; border-radius: 8px; position: relative; overflow: hidden; }
-        canvas#sig-canvas { width: 100% !important; height: 100% !important; touch-action: none; }
+        #canvas-container { flex: 1; width: 95vw; margin: 10px auto; background: #fff; border-radius: 8px; position: relative; }
+        canvas#sig-canvas { width: 100%; height: 100%; touch-action: none; display: block; }
         .footer-sign { padding: 15px; display: flex; gap: 10px; background: #111; }
         #final-tools { position: fixed; bottom: 0; left: 0; right: 0; display: none; flex-direction: row; gap: 5px; background: rgba(0,0,0,0.95); padding: 12px; z-index: 100; }
     </style>
@@ -52,28 +52,30 @@
     <script>
         const { PDFDocument } = PDFLib;
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
-        let pdfData, pad, sigBase64;
+        let pdfData, pad, sigBase64, resizeTimer;
 
         function resizeCanvas() {
             const canvas = document.getElementById('sig-canvas');
-            if (!canvas) return;
+            if (!canvas || !pad) return;
             const ratio = Math.max(window.devicePixelRatio || 1, 1);
             canvas.width = canvas.offsetWidth * ratio;
             canvas.height = canvas.offsetHeight * ratio;
             canvas.getContext("2d").setTransform(ratio, 0, 0, ratio, 0, 0);
-            if (pad) pad.clear(); 
+            pad.clear(); 
         }
 
-        window.addEventListener("resize", resizeCanvas);
+        // Calibração inteligente para rotação e modo computador
+        window.addEventListener("resize", () => {
+            clearTimeout(resizeTimer);
+            resizeTimer = setTimeout(resizeCanvas, 200);
+        });
 
         function showSignScreen() {
             if (!pdfData) return;
             document.getElementById('screen-sign').style.display = 'flex';
-            setTimeout(() => {
-                const canvas = document.getElementById('sig-canvas');
-                pad = new SignaturePad(canvas, { penColor: "rgb(0, 0, 80)" });
-                resizeCanvas();
-            }, 50);
+            const canvas = document.getElementById('sig-canvas');
+            if (!pad) pad = new SignaturePad(canvas, { penColor: "rgb(0, 0, 80)" });
+            setTimeout(resizeCanvas, 50);
         }
 
         function hideSignScreen() { document.getElementById('screen-sign').style.display = 'none'; }
@@ -91,20 +93,29 @@
                 box.className = 'sig-box'; box.style.left = "20px"; box.style.top = "20px";
                 box.innerHTML = `<img src="${sigBase64}"><div class="resizer"></div>`;
                 
-                box.addEventListener("touchmove", (e) => {
+                const moveHandler = (e) => {
                     if (e.target.className === 'resizer') return;
                     e.preventDefault();
+                    const touch = e.touches ? e.touches[0] : e;
                     const r = page.getBoundingClientRect();
-                    box.style.left = (e.touches[0].clientX - r.left - (box.offsetWidth/2)) + "px";
-                    box.style.top = (e.touches[0].clientY - r.top - (box.offsetHeight/2)) + "px";
-                }, {passive: false});
+                    box.style.left = (touch.clientX - r.left - (box.offsetWidth/2)) + "px";
+                    box.style.top = (touch.clientY - r.top - (box.offsetHeight/2)) + "px";
+                };
 
-                box.querySelector('.resizer').addEventListener("touchmove", (e) => {
+                box.addEventListener("touchmove", moveHandler, {passive: false});
+                box.addEventListener("mousemove", (e) => { if(e.buttons === 1) moveHandler(e); });
+
+                const resizeHandler = (e) => {
                     e.preventDefault(); e.stopPropagation();
+                    const touch = e.touches ? e.touches[0] : e;
                     const r = box.getBoundingClientRect();
-                    box.style.width = (e.touches[0].clientX - r.left) + "px";
-                    box.style.height = (e.touches[0].clientY - r.top) + "px";
-                }, {passive: false});
+                    box.style.width = (touch.clientX - r.left) + "px";
+                    box.style.height = (touch.clientY - r.top) + "px";
+                };
+
+                box.querySelector('.resizer').addEventListener("touchmove", resizeHandler, {passive: false});
+                box.querySelector('.resizer').addEventListener("mousemove", (e) => { if(e.buttons === 1) resizeHandler(e); });
+                
                 page.appendChild(box);
             });
             document.getElementById('final-tools').style.display = 'flex';
@@ -147,7 +158,7 @@
             const bytes = await doc.save({ useObjectStreams: perfil !== 'printer' });
             const link = document.createElement('a');
             link.href = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
-            link.download = `assinado_${perfil}.pdf`;
+            link.download = `pdf_${perfil}.pdf`;
             link.click();
         }
     </script>
