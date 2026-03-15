@@ -3,48 +3,102 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Assinador v5.11</title>
+    <title>Assinador v5.12</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.0.0/dist/signature_pad.umd.min.js"></script>
     <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
     <style>
         * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-        body { font-family: sans-serif; margin: 0; background: #000; color: #fff; height: 100vh; overflow: hidden; }
-        header { background: #111; padding: 10px; display: flex; justify-content: center; gap: 8px; border-bottom: 1px solid #444; }
-        .btn { padding: 12px 10px; border: none; border-radius: 4px; font-weight: bold; color: white; font-size: 9px; cursor: pointer; text-transform: uppercase; flex: 1; }
-        #viewer { flex: 1; overflow-y: auto; padding: 10px; display: flex; flex-direction: column; align-items: center; height: calc(100vh - 60px); }
-        .pdf-page-wrapper { position: relative; background: white; margin-bottom: 15px; line-height: 0; }
-        .sig-box { position: absolute; width: 150px; height: 75px; border: 1.5px dashed #007bff; background: rgba(0,123,255,0.05); }
+        body { font-family: sans-serif; margin: 0; background: #000; color: #fff; height: 100vh; overflow: hidden; display: flex; flex-direction: column; }
+        
+        /* Ajuste do Cabeçalho para não sumir no modo celular */
+        header { 
+            background: #111; 
+            padding: 15px 10px; 
+            display: flex; 
+            justify-content: center; 
+            gap: 10px; 
+            border-bottom: 1px solid #444;
+            min-height: 70px; /* Altura garantida */
+            align-items: center;
+        }
+
+        .btn { 
+            padding: 0 15px; 
+            height: 45px; /* Altura fixa para toque fácil */
+            border: none; 
+            border-radius: 6px; 
+            font-weight: bold; 
+            color: white; 
+            font-size: 12px; 
+            cursor: pointer; 
+            text-transform: uppercase; 
+            flex: 1;
+            max-width: 200px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #viewer { 
+            flex: 1; 
+            overflow-y: auto; 
+            padding: 15px; 
+            display: flex; 
+            flex-direction: column; 
+            align-items: center; 
+            background: #222;
+        }
+
+        .pdf-page-wrapper { position: relative; background: white; margin-bottom: 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.5); }
+        
+        /* Caixa de assinatura mais limpa */
+        .sig-box { position: absolute; width: 150px; height: 75px; border: 2px dashed #3498db; background: rgba(52,152,219,0.08); touch-action: none; }
         .sig-box img { width: 100%; height: 100%; pointer-events: none; }
-        .resizer { position: absolute; bottom: 0; right: 0; width: 0; height: 0; border-style: solid; border-width: 0 0 35px 35px; border-color: transparent transparent #007bff transparent; }
+        .resizer { position: absolute; bottom: 0; right: 0; width: 30px; height: 30px; background: #3498db; clip-path: polygon(100% 0, 0% 100%, 100% 100%); }
+
+        /* Rodapé de ferramentas */
+        #final-tools { 
+            position: fixed; 
+            bottom: 0; 
+            left: 0; 
+            right: 0; 
+            display: none; 
+            flex-direction: row; 
+            gap: 8px; 
+            background: rgba(0,0,0,0.9); 
+            padding: 15px; 
+            border-top: 1px solid #333;
+            z-index: 100;
+        }
+
         #screen-sign { position: fixed; inset: 0; background: #1a1a1a; z-index: 9999; display: none; flex-direction: column; }
-        #canvas-container { width: 92vw; height: 65vh; background: #fff; border-radius: 8px; margin: auto; }
-        canvas#sig-canvas { width: 100%; height: 100%; }
-        #final-tools { position: fixed; bottom: 0; left: 0; right: 0; display: none; flex-direction: row; gap: 5px; background: rgba(17,17,17,0.95); padding: 10px; border-top: 1px solid #333; }
+        #canvas-container { width: 90vw; height: 60vh; background: #fff; border-radius: 8px; margin: auto; }
+        canvas#sig-canvas { width: 100%; height: 100%; border-radius: 8px; }
     </style>
 </head>
 <body>
     <header>
         <input type="file" id="pdf-in" style="display:none" accept="application/pdf">
-        <button class="btn" style="background:#3498db" onclick="document.getElementById('pdf-in').click()">1. Abrir</button>
-        <button id="btn-sign" class="btn" style="background:#f39c12" onclick="showSignScreen()">2. Assinar</button>
-        <button id="btn-redo" class="btn" style="background:#e67e22; display:none;" onclick="showSignScreen()">Refazer</button>
+        <button class="btn" style="background:#3498db" onclick="document.getElementById('pdf-in').click()">1. ABRIR PDF</button>
+        <button id="btn-sign" class="btn" style="background:#f39c12" onclick="showSignScreen()">2. ASSINAR</button>
+        <button id="btn-redo" class="btn" style="background:#e67e22; display:none;" onclick="showSignScreen()">REFAZER</button>
     </header>
 
     <div id="viewer"></div>
 
     <div id="final-tools">
-        <button class="btn" style="background:#2ecc71" onclick="saveFinal('printer')">PRINTER (Alta)</button>
-        <button class="btn" style="background:#f1c40f; color:#000" onclick="saveFinal('ebook')">EBOOK (Média)</button>
-        <button class="btn" style="background:#e74c3c" onclick="saveFinal('screen')">SCREEN (Baixa)</button>
+        <button class="btn" style="background:#2ecc71" onclick="saveFinal('printer')">ALTA (Printer)</button>
+        <button class="btn" style="background:#f1c40f; color:#000" onclick="saveFinal('ebook')">MÉDIA (Ebook)</button>
+        <button class="btn" style="background:#e74c3c" onclick="saveFinal('screen')">LEVE (Screen)</button>
     </div>
 
     <div id="screen-sign">
         <div style="flex:1; display:flex;"><div id="canvas-container"><canvas id="sig-canvas"></canvas></div></div>
-        <div style="padding:15px; display:flex; gap:10px; background:#111;">
+        <div style="padding:20px; display:flex; gap:10px; background:#111;">
             <button class="btn" style="background:#27ae60" onclick="applySignature()">OK</button>
-            <button class="btn" style="background:#e74c3c" onclick="pad.clear()">Limpar</button>
-            <button class="btn" style="background:#7f8c8d" onclick="hideSignScreen()">Sair</button>
+            <button class="btn" style="background:#e74c3c" onclick="pad.clear()">LIMPAR</button>
+            <button class="btn" style="background:#7f8c8d" onclick="hideSignScreen()">SAIR</button>
         </div>
     </div>
 
@@ -54,12 +108,16 @@
         let pdfData, pad, sigBase64;
 
         function showSignScreen() {
-            if (!pdfData) return;
+            if (!pdfData) return alert("Abra um PDF primeiro!");
             document.getElementById('screen-sign').style.display = 'flex';
             const canvas = document.getElementById('sig-canvas');
-            canvas.width = canvas.offsetWidth; canvas.height = canvas.offsetHeight;
-            pad = new SignaturePad(canvas, { penColor: "rgb(0, 0, 80)" });
+            const ratio = window.devicePixelRatio || 1;
+            canvas.width = canvas.offsetWidth * ratio;
+            canvas.height = canvas.offsetHeight * ratio;
+            canvas.getContext("2d").scale(ratio, ratio);
+            pad = new SignaturePad(canvas, { penColor: "rgb(0, 0, 128)" });
         }
+
         function hideSignScreen() { document.getElementById('screen-sign').style.display = 'none'; }
 
         function applySignature() {
@@ -67,31 +125,35 @@
             sigBase64 = pad.toDataURL("image/png");
             hideSignScreen();
             document.getElementById('btn-sign').style.display = 'none';
-            document.getElementById('btn-redo').style.display = 'block';
+            document.getElementById('btn-redo').style.display = 'flex';
             
             document.querySelectorAll('.pdf-page-wrapper').forEach(page => {
                 const box = document.createElement('div');
-                box.className = 'sig-box'; box.style.left = "50px"; box.style.top = "50px";
+                box.className = 'sig-box'; box.style.left = "20px"; box.style.top = "20px";
                 box.innerHTML = `<img src="${sigBase64}"><div class="resizer"></div>`;
+                
                 box.addEventListener("touchmove", (e) => {
                     if (e.target.className === 'resizer') return;
+                    e.preventDefault();
                     const r = page.getBoundingClientRect();
-                    box.style.left = (e.touches[0].clientX - r.left - 75) + "px";
-                    box.style.top = (e.touches[0].clientY - r.top - 37) + "px";
-                });
+                    box.style.left = (e.touches[0].clientX - r.left - (box.offsetWidth/2)) + "px";
+                    box.style.top = (e.touches[0].clientY - r.top - (box.offsetHeight/2)) + "px";
+                }, {passive: false});
+
                 box.querySelector('.resizer').addEventListener("touchmove", (e) => {
-                    e.stopPropagation();
+                    e.preventDefault(); e.stopPropagation();
                     const r = box.getBoundingClientRect();
                     box.style.width = (e.touches[0].clientX - r.left) + "px";
                     box.style.height = (e.touches[0].clientY - r.top) + "px";
-                });
+                }, {passive: false});
                 page.appendChild(box);
             });
             document.getElementById('final-tools').style.display = 'flex';
         }
 
         document.getElementById('pdf-in').onchange = async (e) => {
-            pdfData = await e.target.files[0].arrayBuffer();
+            const file = e.target.files[0];
+            pdfData = await file.arrayBuffer();
             const pdf = await pdfjsLib.getDocument({data: pdfData}).promise;
             const view = document.getElementById('viewer'); view.innerHTML = "";
             for (let i = 1; i <= pdf.numPages; i++) {
@@ -107,9 +169,9 @@
 
         async function saveFinal(perfil) {
             const doc = await PDFDocument.load(pdfData);
-            let qual = 0.5;
+            let qual = 0.4;
             if(perfil === 'screen') qual = 0.05;
-            if(perfil === 'printer') qual = 0.9;
+            if(perfil === 'printer') qual = 0.8;
 
             const sigImg = await doc.embedJpg(pad.toDataURL("image/jpeg", qual));
             const pages = doc.getPages();
@@ -127,13 +189,7 @@
                 }
             });
 
-            // Lógica de compressão por perfil
-            const bytes = await doc.save({ 
-                useObjectStreams: perfil !== 'printer',
-                addDefaultPage: false,
-                updateMetadata: perfil === 'printer'
-            });
-            
+            const bytes = await doc.save({ useObjectStreams: perfil !== 'printer' });
             const link = document.createElement('a');
             link.href = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
             link.download = `pdf_${perfil}.pdf`;
