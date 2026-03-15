@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Assinador PDF v5.9</title>
+    <title>Assinador v5.10</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.0.0/dist/signature_pad.umd.min.js"></script>
     <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
@@ -11,7 +11,7 @@
         * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
         body { font-family: sans-serif; margin: 0; background: #000; color: #fff; height: 100vh; overflow: hidden; }
         header { background: #111; padding: 10px; display: flex; justify-content: center; gap: 8px; border-bottom: 1px solid #444; z-index: 100; }
-        .btn { padding: 12px 15px; border: none; border-radius: 4px; font-weight: bold; color: white; font-size: 11px; cursor: pointer; text-transform: uppercase; }
+        .btn { padding: 12px 15px; border: none; border-radius: 4px; font-weight: bold; color: white; font-size: 10px; cursor: pointer; text-transform: uppercase; }
         #viewer { flex: 1; overflow-y: auto; padding: 10px; display: flex; flex-direction: column; align-items: center; touch-action: pan-y; -webkit-overflow-scrolling: touch; height: calc(100vh - 60px); }
         .pdf-page-wrapper { position: relative; background: white; margin-bottom: 15px; line-height: 0; }
         .sig-box { position: absolute; width: 150px; height: 75px; border: 1.5px dashed #007bff; background: rgba(0,123,255,0.05); touch-action: none; }
@@ -20,8 +20,11 @@
         #screen-sign { position: fixed; inset: 0; background: #1a1a1a; z-index: 9999; display: none; flex-direction: column; touch-action: none; }
         #canvas-container { width: 92vw; height: 65vh; background: #fff; border-radius: 8px; position: relative; margin: auto; }
         canvas#sig-canvas { width: 100%; height: 100%; touch-action: none; }
-        .canvas-footer { background: #111; padding: 15px; display: flex; justify-content: center; gap: 20px; }
+        .canvas-footer { background: #111; padding: 15px; display: flex; justify-content: center; gap: 15px; }
         #orientation-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.98); z-index: 10000; display: none; flex-direction: column; align-items: center; justify-content: center; }
+        
+        /* Painel de Download */
+        #final-tools { position: fixed; bottom: 10px; left: 0; right: 0; display: none; flex-direction: row; flex-wrap: wrap; justify-content: center; gap: 8px; background: rgba(0,0,0,0.8); padding: 15px; z-index: 101; }
     </style>
 </head>
 <body>
@@ -34,16 +37,17 @@
 
     <div id="viewer"></div>
 
-    <div id="final-tools" style="position:fixed; bottom:25px; left:50%; transform:translateX(-50%); display:none; flex-direction:column; gap:10px; align-items:center;">
-        <button class="btn" style="background:#27ae60; padding:15px 30px; border-radius:30px;" onclick="saveFinalPdf(false)">BAIXAR NORMAL</button>
-        <button class="btn" style="background:#8e44ad; padding:10px 20px; border-radius:30px; font-size:9px;" onclick="saveFinalPdf(true)">BAIXAR COMPRIMIDO (LEVE)</button>
+    <div id="final-tools">
+        <button class="btn" style="background:#2ecc71" onclick="saveFinalPdf('normal')">Normal</button>
+        <button class="btn" style="background:#f1c40f; color:#000" onclick="saveFinalPdf('media')">Compressão Média</button>
+        <button class="btn" style="background:#e74c3c" onclick="saveFinalPdf('pesada')">Compressão Pesada</button>
     </div>
 
     <div id="screen-sign">
         <div style="flex:1; display:flex;"><div id="canvas-container"><canvas id="sig-canvas"></canvas></div></div>
         <div class="canvas-footer">
-            <button class="btn" style="background:#27ae60; min-width:120px;" onclick="applySignature()">Confirmar</button>
-            <button class="btn" style="background:#e74c3c; min-width:120px;" onclick="pad.clear()">Limpar</button>
+            <button class="btn" style="background:#27ae60; min-width:100px;" onclick="applySignature()">OK</button>
+            <button class="btn" style="background:#e74c3c; min-width:100px;" onclick="pad.clear()">Limpar</button>
             <button class="btn" style="background:#7f8c8d" onclick="hideSignScreen()">Sair</button>
         </div>
     </div>
@@ -78,7 +82,7 @@
             canvas.height = canvas.offsetHeight * ratio;
             canvas.getContext("2d").setTransform(ratio, 0, 0, ratio, 0, 0);
             if (pad) pad.off();
-            pad = new SignaturePad(canvas, { penColor: "rgb(0, 0, 100)", minWidth: 1.5, maxWidth: 3.5 });
+            pad = new SignaturePad(canvas, { penColor: "rgb(0, 0, 80)", minWidth: 1.5, maxWidth: 3.5 });
         }
 
         function applySignature() {
@@ -129,11 +133,19 @@
             }
         };
 
-        async function saveFinalPdf(compress) {
+        async function saveFinalPdf(modo) {
             const doc = await PDFDocument.load(pdfData);
-            // Se compress for true, reduzimos a qualidade da imagem da assinatura
-            const imageToEmbed = compress ? pad.toDataURL("image/jpeg", 0.5) : sigBase64;
-            const sigImg = compress ? await doc.embedJpg(imageToEmbed) : await doc.embedPng(imageToEmbed);
+            let sigImg;
+            
+            if (modo === 'normal') {
+                sigImg = await doc.embedPng(sigBase64);
+            } else if (modo === 'media') {
+                const mediaData = pad.toDataURL("image/jpeg", 0.4);
+                sigImg = await doc.embedJpg(mediaData);
+            } else {
+                const pesadaData = pad.toDataURL("image/jpeg", 0.1);
+                sigImg = await doc.embedJpg(pesadaData);
+            }
             
             const pdfPages = doc.getPages();
             document.querySelectorAll('.pdf-page-wrapper').forEach((htmlP, i) => {
@@ -149,11 +161,10 @@
                 }
             });
 
-            // useObjectStreams: false ajuda em alguns leitores, mas true costuma comprimir mais
-            const bytes = await doc.save({ useObjectStreams: compress });
+            const bytes = await doc.save({ useObjectStreams: modo !== 'normal' });
             const link = document.createElement('a');
             link.href = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
-            link.download = compress ? "comprimido.pdf" : "assinado.pdf";
+            link.download = `pdf_${modo}.pdf`;
             link.click();
         }
     </script>
