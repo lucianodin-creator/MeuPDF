@@ -2,8 +2,8 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Moraes Shop - Assinador v5.3</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Moraes Shop v5.4</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.0.0/dist/signature_pad.umd.min.js"></script>
     <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
@@ -14,21 +14,25 @@
         /* TELA DO PDF */
         #screen-pdf { position: absolute; inset: 0; display: flex; flex-direction: column; }
         header { background: #111; padding: 10px; display: flex; justify-content: center; gap: 8px; border-bottom: 1px solid #444; }
-        .btn { padding: 12px 15px; border: none; border-radius: 4px; font-weight: bold; color: white; font-size: 11px; }
+        .btn { padding: 12px 15px; border: none; border-radius: 4px; font-weight: bold; color: white; font-size: 11px; cursor: pointer; }
         #viewer { flex: 1; overflow-y: auto; padding: 10px; display: flex; flex-direction: column; align-items: center; touch-action: pan-y; }
         .pdf-page-wrapper { position: relative; background: white; margin-bottom: 15px; line-height: 0; }
-        .sig-box { position: absolute; width: 150px; height: 75px; border: 2px dashed #007bff; background: rgba(0,123,255,0.1); cursor: move; }
+        .sig-box { position: absolute; width: 150px; height: 75px; border: 2px dashed #007bff; background: rgba(0,123,255,0.1); }
         .sig-box img { width: 100%; height: 100%; pointer-events: none; }
 
-        /* TELA DE ASSINATURA (MODO ISOLADO) */
-        #screen-sign { 
-            position: fixed; inset: 0; background: #fff; z-index: 9999; 
-            display: none; flex-direction: column; 
+        /* TELA DE ASSINATURA */
+        #screen-sign { position: fixed; inset: 0; background: #fff; z-index: 9999; display: none; flex-direction: column; }
+        #canvas-container { flex: 1; position: relative; width: 100%; background: #fff; }
+        canvas#sig-canvas { width: 100%; height: 100%; display: block; }
+        .canvas-footer { background: #111; padding: 15px; display: flex; justify-content: center; gap: 20px; }
+
+        /* OVERLAY DE ORIENTAÇÃO */
+        #orientation-overlay {
+            position: fixed; inset: 0; background: rgba(0,0,0,0.95); z-index: 10000;
+            display: none; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 20px;
         }
-        #canvas-header { background: #f39c12; color: #000; padding: 15px; text-align: center; font-weight: bold; }
-        #canvas-container { flex: 1; position: relative; width: 100%; }
-        canvas#sig-canvas { width: 100%; height: 100%; display: block; background: #fff; }
-        .canvas-footer { background: #111; padding: 20px; display: flex; justify-content: center; gap: 20px; }
+        .icon-rotate { font-size: 50px; margin-bottom: 20px; animation: rotate 2s infinite; }
+        @keyframes rotate { 0% { transform: rotate(0deg); } 50% { transform: rotate(-90deg); } 100% { transform: rotate(0deg); } }
     </style>
 </head>
 <body>
@@ -40,49 +44,78 @@
         </header>
         <div id="viewer"></div>
         <div id="final-tools" style="position:fixed; bottom:20px; left:50%; transform:translateX(-50%); display:none;">
-            <button class="btn" style="background:#27ae60; padding:18px 40px; font-size:14px;" onclick="saveFinalPdf()">GERAR PDF FINAL</button>
+            <button class="btn" style="background:#27ae60; padding:18px 40px;" onclick="saveFinalPdf()">GERAR PDF FINAL</button>
         </div>
     </div>
 
     <div id="screen-sign">
-        <div id="canvas-header">ASSINE NA TELA INTEIRA (MORAES SHOP v5.3)</div>
-        <div id="canvas-container">
-            <canvas id="sig-canvas"></canvas>
-        </div>
+        <div id="canvas-container"><canvas id="sig-canvas"></canvas></div>
         <div class="canvas-footer">
-            <button class="btn" style="background:#27ae60; min-width:120px; font-size:16px;" onclick="applySignature()">OK</button>
-            <button class="btn" style="background:#e74c3c; min-width:120px; font-size:16px;" onclick="pad.clear()">LIMPAR</button>
+            <button class="btn" style="background:#27ae60; min-width:120px;" onclick="applySignature()">OK</button>
+            <button class="btn" style="background:#e74c3c; min-width:120px;" onclick="pad.clear()">LIMPAR</button>
+            <button class="btn" style="background:#7f8c8d" onclick="hideSignScreen()">VOLTAR</button>
         </div>
+    </div>
+
+    <div id="orientation-overlay">
+        <div class="icon-rotate">📱🔄</div>
+        <h2 style="color:#f39c12">VIRE O CELULAR</h2>
+        <p>Por favor, coloque o aparelho deitado para habilitar a assinatura com precisão.</p>
     </div>
 
     <script>
         const { PDFDocument } = PDFLib;
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
-        let pdfData, pad, sigBase64;
+        let pdfData, pad, sigBase64, isSigningMode = false;
+
+        function checkOrientation() {
+            if (!isSigningMode) return;
+            const overlay = document.getElementById('orientation-overlay');
+            if (window.innerHeight > window.innerWidth) {
+                overlay.style.display = 'flex';
+            } else {
+                overlay.style.display = 'none';
+                setTimeout(resizeCanvas, 200);
+            }
+        }
+
+        window.addEventListener('resize', checkOrientation);
 
         function showSignScreen() {
+            if (!pdfData) return alert("Abra o PDF primeiro!");
+            isSigningMode = true;
             document.getElementById('screen-sign').style.display = 'flex';
+            checkOrientation();
+            resizeCanvas();
+        }
+
+        function hideSignScreen() {
+            isSigningMode = false;
+            document.getElementById('screen-sign').style.display = 'none';
+            document.getElementById('orientation-overlay').style.display = 'none';
+        }
+
+        function resizeCanvas() {
+            if (!isSigningMode) return;
             const canvas = document.getElementById('sig-canvas');
             const ratio = window.devicePixelRatio || 1;
-            canvas.width = window.innerWidth * ratio;
-            canvas.height = (window.innerHeight - 150) * ratio; // Desconta cabeçalho e rodapé
-            canvas.getContext("2d").scale(ratio, ratio);
-            
-            if (pad) pad.off();
-            pad = new SignaturePad(canvas, { penColor: "rgb(0, 0, 100)", minWidth: 2, maxWidth: 4 });
+            canvas.width = canvas.offsetWidth * ratio;
+            canvas.height = canvas.offsetHeight * ratio;
+            canvas.getContext("2d").setTransform(ratio, 0, 0, ratio, 0, 0);
+            if (pad) pad.clear();
+            else pad = new SignaturePad(canvas, { penColor: "rgb(0, 0, 128)", minWidth: 2, maxWidth: 4 });
         }
 
         function applySignature() {
             if (pad.isEmpty()) return;
-            sigBase64 = pad.toDataURL("image/png");
-            document.getElementById('screen-sign').style.display = 'none';
+            sigBase64 = pad.toDataURL();
+            hideSignScreen();
             const pages = document.querySelectorAll('.pdf-page-wrapper');
             pages.forEach(page => {
                 const old = page.querySelector('.sig-box'); if(old) old.remove();
                 const box = document.createElement('div');
-                box.className = 'sig-box'; box.style.left = "20px"; box.style.top = "20px";
+                box.className = 'sig-box'; box.style.left = "30px"; box.style.top = "30px";
                 box.innerHTML = `<img src="${sigBase64}">`;
-                
                 box.addEventListener("touchmove", (e) => {
                     const r = page.getBoundingClientRect(); const t = e.touches[0];
                     box.style.left = (t.clientX - r.left - (box.offsetWidth/2)) + "px";
@@ -102,7 +135,7 @@
                 const p = await pdf.getPage(i);
                 const w = document.createElement('div'); w.className = 'pdf-page-wrapper';
                 const c = document.createElement('canvas');
-                const vp = p.getViewport({scale: (view.clientWidth * 0.95) / p.getViewport({scale:1}).width});
+                const vp = p.getViewport({scale: (view.clientWidth * 0.96) / p.getViewport({scale:1}).width});
                 c.width = vp.width; c.height = vp.height;
                 await p.render({canvasContext: c.getContext('2d'), viewport: vp}).promise;
                 w.appendChild(c); view.appendChild(w);
@@ -117,7 +150,6 @@
                 const box = htmlP.querySelector('.sig-box');
                 if (box) {
                     const p = pdfPages[i]; const { width, height } = p.getSize();
-                    const rect = htmlP.getBoundingClientRect();
                     p.drawImage(sigPng, {
                         x: width * (parseFloat(box.style.left) / htmlP.offsetWidth),
                         y: height - (height * (parseFloat(box.style.top) / htmlP.offsetHeight)) - (height * (box.offsetHeight / htmlP.offsetHeight)),
