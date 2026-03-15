@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Moraes Shop v5.6</title>
+    <title>Moraes Shop v5.7</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.0.0/dist/signature_pad.umd.min.js"></script>
     <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
@@ -18,14 +18,12 @@
         
         .pdf-page-wrapper { position: relative; background: white; margin-bottom: 15px; line-height: 0; }
         
-        /* CAIXA DE ASSINATURA NO PDF */
         .sig-box { 
             position: absolute; width: 150px; height: 75px; 
             border: 1.5px dashed #007bff; background: rgba(0,123,255,0.05); 
         }
         .sig-box img { width: 100%; height: 100%; pointer-events: none; }
         
-        /* TRIÂNGULO AZUL DE AJUSTE */
         .resizer {
             position: absolute; bottom: 0; right: 0;
             width: 0; height: 0;
@@ -53,7 +51,8 @@
         <header>
             <input type="file" id="pdf-in" style="display:none" accept="application/pdf">
             <button class="btn" style="background:#3498db" onclick="document.getElementById('pdf-in').click()">1. ABRIR PDF</button>
-            <button class="btn" style="background:#f39c12" onclick="showSignScreen()">2. ASSINAR</button>
+            <button id="btn-sign" class="btn" style="background:#f39c12" onclick="showSignScreen()">2. ASSINAR</button>
+            <button id="btn-redo" class="btn" style="background:#e67e22; display:none;" onclick="showSignScreen()">REFAZER</button>
         </header>
         <div id="viewer"></div>
         <div id="final-tools" style="position:fixed; bottom:20px; left:50%; transform:translateX(-50%); display:none;">
@@ -72,7 +71,7 @@
 
     <div id="orientation-overlay">
         <h2 style="color:#f39c12">VIRE O CELULAR</h2>
-        <p>Aguardando modo paisagem...</p>
+        <p>Gire para o modo paisagem para assinar.</p>
     </div>
 
     <script>
@@ -119,14 +118,30 @@
             sigBase64 = pad.toDataURL("image/png");
             hideSignScreen();
             
+            // Gerencia botões de cabeçalho
+            document.getElementById('btn-sign').style.display = 'none';
+            document.getElementById('btn-redo').style.display = 'block';
+
             const pages = document.querySelectorAll('.pdf-page-wrapper');
             pages.forEach(page => {
-                const old = page.querySelector('.sig-box'); if(old) old.remove();
+                const old = page.querySelector('.sig-box'); 
+                // Se já existir uma assinatura (caso de refazer), mantém a posição e tamanho
+                let oldLeft = "50px", oldTop = "50px", oldW = "150px", oldH = "75px";
+                if(old) {
+                    oldLeft = old.style.left;
+                    oldTop = old.style.top;
+                    oldW = old.style.width;
+                    oldH = old.style.height;
+                    old.remove();
+                }
+
                 const box = document.createElement('div');
-                box.className = 'sig-box'; box.style.left = "50px"; box.style.top = "50px";
+                box.className = 'sig-box'; 
+                box.style.left = oldLeft; box.style.top = oldTop;
+                box.style.width = oldW; box.style.height = oldH;
+                
                 box.innerHTML = `<img src="${sigBase64}"><div class="resizer"></div>`;
                 
-                // ARRASTAR
                 box.addEventListener("touchmove", (e) => {
                     if (e.target.classList.contains('resizer')) return;
                     const r = page.getBoundingClientRect(); const t = e.touches[0];
@@ -134,7 +149,6 @@
                     box.style.top = (t.clientY - r.top - (box.offsetHeight/2)) + "px";
                 });
 
-                // REDIMENSIONAR (TRIÂNGULO)
                 const resizer = box.querySelector('.resizer');
                 resizer.addEventListener("touchmove", (e) => {
                     e.stopPropagation();
@@ -186,7 +200,7 @@
             const bytes = await doc.save();
             const link = document.createElement('a');
             link.href = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
-            link.download = "Assinado_Final.pdf";
+            link.download = "Documento_MoraesShop.pdf";
             link.click();
         }
     </script>
