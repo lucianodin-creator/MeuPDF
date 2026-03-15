@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Assinador v5.15</title>
+    <title>Assinador v5.16</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.0.0/dist/signature_pad.umd.min.js"></script>
     <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
@@ -35,9 +35,9 @@
     <div id="viewer"></div>
 
     <div id="final-tools">
-        <button class="btn" style="background:#2ecc71" onclick="saveFinal('printer')">ALTA</button>
-        <button class="btn" style="background:#f1c40f; color:#000" onclick="saveFinal('ebook')">MÉDIA</button>
-        <button class="btn" style="background:#e74c3c" onclick="saveFinal('screen')">LEVE</button>
+        <button id="btn-alta" class="btn" style="background:#2ecc71" onclick="saveFinal(0.9, 'alta')">ALTA</button>
+        <button id="btn-media" class="btn" style="background:#f1c40f; color:#000" onclick="saveFinal(0.5, 'media')">MÉDIA</button>
+        <button id="btn-leve" class="btn" style="background:#e74c3c" onclick="saveFinal(0.1, 'leve')">LEVE</button>
     </div>
 
     <div id="screen-sign">
@@ -57,29 +57,17 @@
         function resizeCanvas() {
             const canvas = document.getElementById('sig-canvas');
             if (!canvas || !pad) return;
-            
-            // Salva o que já foi desenhado
             const tempCopy = canvas.toDataURL();
-            
             const ratio = Math.max(window.devicePixelRatio || 1, 1);
             canvas.width = canvas.offsetWidth * ratio;
             canvas.height = canvas.offsetHeight * ratio;
             canvas.getContext("2d").setTransform(ratio, 0, 0, ratio, 0, 0);
-            
             pad.clear();
-            
-            // Restaura o desenho na nova escala
-            const img = new Image();
-            img.src = tempCopy;
-            img.onload = () => {
-                canvas.getContext("2d").drawImage(img, 0, 0, canvas.offsetWidth, canvas.offsetHeight);
-            };
+            const img = new Image(); img.src = tempCopy;
+            img.onload = () => { canvas.getContext("2d").drawImage(img, 0, 0, canvas.offsetWidth, canvas.offsetHeight); };
         }
 
-        window.addEventListener("resize", () => {
-            clearTimeout(resizeTimer);
-            resizeTimer = setTimeout(resizeCanvas, 250);
-        });
+        window.addEventListener("resize", () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(resizeCanvas, 250); });
 
         function showSignScreen() {
             if (!pdfData) return;
@@ -112,7 +100,6 @@
                     box.style.left = (touch.clientX - r.left - (box.offsetWidth/2)) + "px";
                     box.style.top = (touch.clientY - r.top - (box.offsetHeight/2)) + "px";
                 };
-
                 box.addEventListener("touchmove", moveHandler, {passive: false});
                 box.addEventListener("mousemove", (e) => { if(e.buttons === 1) moveHandler(e); });
 
@@ -123,7 +110,6 @@
                     box.style.width = (touch.clientX - r.left) + "px";
                     box.style.height = (touch.clientY - r.top) + "px";
                 };
-
                 box.querySelector('.resizer').addEventListener("touchmove", resizeHandler, {passive: false});
                 box.querySelector('.resizer').addEventListener("mousemove", (e) => { if(e.buttons === 1) resizeHandler(e); });
                 page.appendChild(box);
@@ -146,30 +132,35 @@
             }
         };
 
-        async function saveFinal(perfil) {
-            const doc = await PDFDocument.load(pdfData);
-            let qual = 0.4;
-            if(perfil === 'screen') qual = 0.05;
-            if(perfil === 'printer') qual = 0.8;
-            const sigImg = await doc.embedJpg(sigBase64.replace('image/png', 'image/jpeg'));
-            const pages = doc.getPages();
-            document.querySelectorAll('.pdf-page-wrapper').forEach((htmlP, i) => {
-                const box = htmlP.querySelector('.sig-box');
-                if (box) {
-                    const p = pages[i]; const { width, height } = p.getSize();
-                    p.drawImage(sigImg, {
-                        x: width * (parseFloat(box.style.left) / htmlP.offsetWidth),
-                        y: height - (height * (parseFloat(box.style.top) / htmlP.offsetHeight)) - (height * (box.offsetHeight / htmlP.offsetHeight)),
-                        width: width * (box.offsetWidth / htmlP.offsetWidth),
-                        height: height * (box.offsetHeight / htmlP.offsetHeight)
-                    });
-                }
-            });
-            const bytes = await doc.save({ useObjectStreams: perfil !== 'printer' });
-            const link = document.createElement('a');
-            link.href = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
-            link.download = `pdf_${perfil}.pdf`;
-            link.click();
+        async function saveFinal(qual, nome) {
+            try {
+                const doc = await PDFDocument.load(pdfData);
+                // Converte PNG para JPEG para permitir compressão real
+                const jpgData = pad.toDataURL("image/jpeg", qual);
+                const sigImg = await doc.embedJpg(jpgData);
+                const pages = doc.getPages();
+                
+                document.querySelectorAll('.pdf-page-wrapper').forEach((htmlP, i) => {
+                    const box = htmlP.querySelector('.sig-box');
+                    if (box && pages[i]) {
+                        const p = pages[i]; const { width, height } = p.getSize();
+                        p.drawImage(sigImg, {
+                            x: width * (parseFloat(box.style.left) / htmlP.offsetWidth),
+                            y: height - (height * (parseFloat(box.style.top) / htmlP.offsetHeight)) - (height * (box.offsetHeight / htmlP.offsetHeight)),
+                            width: width * (box.offsetWidth / htmlP.offsetWidth),
+                            height: height * (box.offsetHeight / htmlP.offsetHeight)
+                        });
+                    }
+                });
+                
+                const bytes = await doc.save();
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
+                link.download = `contrato_${nome}.pdf`;
+                link.click();
+            } catch (err) {
+                alert("Erro ao salvar: " + err.message);
+            }
         }
     </script>
 </body>
