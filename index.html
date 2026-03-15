@@ -3,28 +3,25 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Assinador v5.18</title>
+    <title>Assinador v5.19</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.0.0/dist/signature_pad.umd.min.js"></script>
     <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
     <style>
-        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; touch-action: none; }
         body { font-family: sans-serif; margin: 0; background: #000; color: #fff; height: 100vh; overflow: hidden; display: flex; flex-direction: column; }
         header { background: #111; padding: 10px; display: flex; justify-content: center; gap: 8px; border-bottom: 1px solid #444; min-height: 65px; align-items: center; }
         .btn { height: 45px; border: none; border-radius: 6px; font-weight: bold; color: white; font-size: 11px; cursor: pointer; text-transform: uppercase; flex: 1; max-width: 140px; display: flex; align-items: center; justify-content: center; }
         #viewer { flex: 1; overflow-y: auto; padding: 10px; display: flex; flex-direction: column; align-items: center; background: #222; }
         .pdf-page-wrapper { position: relative; background: white; margin-bottom: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.6); }
-        
-        /* Caixa de Assinatura com Alças */
-        .sig-box { position: absolute; width: 180px; height: 90px; border: 2px dashed #3498db; background: rgba(52,152,219,0.15); touch-action: none; z-index: 50; }
-        .sig-box img { width: 100%; height: 100%; pointer-events: none; }
-        
-        /* Setas de Redimensionamento */
-        .handle { position: absolute; width: 35px; height: 35px; background: #3498db; color: white; display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: bold; border-radius: 50%; border: 2px solid white; box-shadow: 0 2px 5px rgba(0,0,0,0.5); z-index: 60; }
-        .br { bottom: -15px; right: -15px; cursor: nwse-resize; } /* Seta Sudeste */
-        .bl { bottom: -15px; left: -15px; cursor: nesw-resize; } /* Seta Sudoeste */
-        .rotator-btn { position: absolute; top: -50px; left: 50%; transform: translateX(-50%); background: #f39c12; padding: 8px 15px; border-radius: 20px; font-size: 12px; font-weight: bold; border: 2px solid white; z-index: 70; }
-
+        .sig-box { position: absolute; width: 200px; border: 2px dashed #3498db; background: rgba(52,152,219,0.1); transition: transform 0.05s linear; outline: none; }
+        .sig-box img { width: 100%; height: auto; display: block; pointer-events: none; }
+        .handle { position: absolute; width: 30px; height: 30px; border: 4px solid #3498db; background: transparent; z-index: 100; pointer-events: auto; }
+        .tl { top: -8px; left: -8px; border-right: none; border-bottom: none; }
+        .tr { top: -8px; right: -8px; border-left: none; border-bottom: none; }
+        .bl { bottom: -8px; left: -8px; border-right: none; border-top: none; }
+        .br { bottom: -8px; right: -8px; border-left: none; border-top: none; }
+        .rotator-btn { position: absolute; top: -55px; left: 50%; transform: translateX(-50%); background: #f39c12; color: #fff; padding: 10px 18px; border-radius: 25px; font-size: 12px; font-weight: bold; border: 2px solid white; z-index: 70; cursor: pointer; white-space: nowrap; }
         #screen-sign { position: fixed; inset: 0; background: #1a1a1a; z-index: 9999; display: none; flex-direction: column; }
         #canvas-container { flex: 1; width: 96vw; margin: 10px auto; background: #fff; border-radius: 10px; border: 3px solid #333; }
         canvas#sig-canvas { width: 100%; height: 100%; display: block; }
@@ -38,15 +35,12 @@
         <button id="btn-sign" class="btn" style="background:#f39c12" onclick="showSignScreen()">2. ASSINAR</button>
         <button id="btn-redo" class="btn" style="background:#e67e22; display:none;" onclick="showSignScreen()">REFAZER</button>
     </header>
-
     <div id="viewer"></div>
-
     <div id="final-tools">
         <button class="btn" style="background:#2ecc71" onclick="saveFinal(0.9, 'alta')">ALTA</button>
         <button class="btn" style="background:#f1c40f; color:#000" onclick="saveFinal(0.5, 'media')">MÉDIA</button>
         <button class="btn" style="background:#e74c3c" onclick="saveFinal(0.1, 'leve')">LEVE</button>
     </div>
-
     <div id="screen-sign">
         <div id="canvas-container"><canvas id="sig-canvas"></canvas></div>
         <div style="padding:20px; display:flex; gap:12px; background:#111;">
@@ -55,11 +49,9 @@
             <button class="btn" style="background:#7f8c8d" onclick="hideSignScreen()">SAIR</button>
         </div>
     </div>
-
     <script>
         const { PDFDocument, degrees } = PDFLib;
-        let pdfData, pad, sigBase64;
-
+        let pdfData, pad, sigBase64, originalAspectRatio;
         function showSignScreen() {
             document.getElementById('screen-sign').style.display = 'flex';
             const canvas = document.getElementById('sig-canvas');
@@ -68,60 +60,59 @@
             canvas.width = canvas.offsetWidth * ratio; canvas.height = canvas.offsetHeight * ratio;
             canvas.getContext("2d").scale(ratio, ratio);
         }
-
         function hideSignScreen() { document.getElementById('screen-sign').style.display = 'none'; }
-
         function applySignature() {
             if (!pad || pad.isEmpty()) return;
             sigBase64 = pad.toDataURL("image/png");
             hideSignScreen();
             document.getElementById('btn-redo').style.display = 'flex';
             document.getElementById('btn-sign').style.display = 'none';
-            
+            const imgForRatio = new Image();
+            imgForRatio.src = sigBase64;
+            imgForRatio.onload = () => {
+                originalAspectRatio = imgForRatio.width / imgForRatio.height;
+                createSigBoxes();
+            };
+        }
+        function createSigBoxes() {
             document.querySelectorAll('.pdf-page-wrapper').forEach(page => {
                 const box = document.createElement('div');
-                box.className = 'sig-box'; box.style.left = "40px"; box.style.top = "80px";
-                box.innerHTML = `
-                    <div class="rotator-btn" onclick="rotateBox(this)">GIRAR 90° ↻</div>
-                    <img src="${sigBase64}">
-                    <div class="handle br">↘</div>
-                    <div class="handle bl">↙</div>
-                `;
-                
+                box.className = 'sig-box';
+                box.style.height = (200 / originalAspectRatio) + "px";
+                box.style.left = "40px"; box.style.top = "80px";
+                box.innerHTML = `<div class="rotator-btn" onclick="rotateBox(this)">GIRAR 90° ↻</div><img src="${sigBase64}"><div class="handle tl"></div><div class="handle tr"></div><div class="handle bl"></div><div class="handle br"></div>`;
                 box.dataset.rotation = 0;
-
-                // Arrastar posição
                 box.addEventListener("touchmove", (e) => {
                     if (e.target.className.includes('handle') || e.target.className.includes('rotator')) return;
                     e.preventDefault();
                     const r = page.getBoundingClientRect();
-                    box.style.left = (e.touches[0].clientX - r.left - (box.offsetWidth/2)) + "px";
-                    box.style.top = (e.touches[0].clientY - r.top - (box.offsetHeight/2)) + "px";
+                    const t = e.touches[0];
+                    box.style.left = (t.clientX - r.left - (box.offsetWidth/2)) + "px";
+                    box.style.top = (t.clientY - r.top - (box.offsetHeight/2)) + "px";
                 }, {passive: false});
-
-                // Redimensionar pela Direita (↘)
-                box.querySelector('.br').addEventListener("touchmove", (e) => {
-                    e.preventDefault(); e.stopPropagation();
-                    const r = box.getBoundingClientRect();
-                    box.style.width = (e.touches[0].clientX - r.left + 15) + "px";
-                    box.style.height = (e.touches[0].clientY - r.top + 15) + "px";
-                }, {passive: false});
-
-                // Redimensionar pela Esquerda (↙)
-                box.querySelector('.bl').addEventListener("touchmove", (e) => {
-                    e.preventDefault(); e.stopPropagation();
-                    const r = box.getBoundingClientRect();
-                    const deltaX = r.right - e.touches[0].clientX;
-                    box.style.width = (deltaX + 15) + "px";
-                    box.style.height = (e.touches[0].clientY - r.top + 15) + "px";
-                    box.style.left = (e.touches[0].clientX - page.getBoundingClientRect().left - 15) + "px";
-                }, {passive: false});
-
+                box.querySelectorAll('.handle').forEach(handle => {
+                    handle.addEventListener("touchmove", (e) => {
+                        e.preventDefault(); e.stopPropagation();
+                        const t = e.touches[0];
+                        const r = box.getBoundingClientRect();
+                        const pR = page.getBoundingClientRect();
+                        let newW;
+                        if (handle.className.includes('br') || handle.className.includes('tr')) {
+                            newW = t.clientX - r.left;
+                        } else {
+                            newW = r.right - t.clientX;
+                            box.style.left = (t.clientX - pR.left) + "px";
+                        }
+                        if (newW > 50) {
+                            box.style.width = newW + "px";
+                            box.style.height = (newW / originalAspectRatio) + "px";
+                        }
+                    }, {passive: false});
+                });
                 page.appendChild(box);
             });
             document.getElementById('final-tools').style.display = 'flex';
         }
-
         function rotateBox(el) {
             const box = el.parentElement;
             let rot = (parseInt(box.dataset.rotation) || 0) + 90;
@@ -129,7 +120,6 @@
             box.dataset.rotation = rot;
             box.style.transform = `rotate(${rot}deg)`;
         }
-
         document.getElementById('pdf-in').onchange = async (e) => {
             const file = e.target.files[0];
             pdfData = await file.arrayBuffer();
@@ -145,7 +135,6 @@
                 w.appendChild(c); view.appendChild(w);
             }
         };
-
         async function saveFinal(qual, nome) {
             const doc = await PDFDocument.load(pdfData);
             const sigImg = await doc.embedJpg(pad.toDataURL("image/jpeg", qual));
@@ -155,12 +144,18 @@
                 if (box && pages[i]) {
                     const p = pages[i]; const { width, height } = p.getSize();
                     const rot = parseInt(box.dataset.rotation) || 0;
+                    const pdfW = width * (box.offsetWidth / htmlP.offsetWidth);
+                    const pdfH = height * (box.offsetHeight / htmlP.offsetHeight);
+                    const pdfX = width * (parseFloat(box.style.left) / htmlP.offsetWidth);
+                    const pdfY = height - (height * (parseFloat(box.style.top) / htmlP.offsetHeight)) - pdfH;
                     p.drawImage(sigImg, {
-                        x: width * (parseFloat(box.style.left) / htmlP.offsetWidth),
-                        y: height - (height * (parseFloat(box.style.top) / htmlP.offsetHeight)) - (height * (box.offsetHeight / htmlP.offsetHeight)),
-                        width: width * (box.offsetWidth / htmlP.offsetWidth),
-                        height: height * (box.offsetHeight / htmlP.offsetHeight),
-                        rotate: degrees(-rot)
+                        x: pdfX + (pdfW / 2),
+                        y: pdfY + (pdfH / 2),
+                        width: pdfW,
+                        height: pdfH,
+                        rotate: degrees(-rot),
+                        xAnchor: 'center',
+                        yAnchor: 'center'
                     });
                 }
             });
