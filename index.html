@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes, viewport-fit=cover">
-    <title>Assinador v5.25</title>
+    <title>Assinador v5.26</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.0.0/dist/signature_pad.umd.min.js"></script>
     <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
@@ -12,15 +12,14 @@
         body { 
             font-family: sans-serif; margin: 0; background: #000; color: #fff; 
             min-height: 100vh; display: flex; flex-direction: column;
-            user-select: none; -webkit-user-select: none; touch-action: manipulation;
+            user-select: none; -webkit-user-select: none; touch-action: none;
         }
         header { background: #111; padding: 12px; display: flex; justify-content: center; gap: 8px; border-bottom: 1px solid #333; position: sticky; top: 0; z-index: 2000; }
         .btn { height: 46px; border: none; border-radius: 6px; font-weight: bold; color: white; font-size: 11px; cursor: pointer; text-transform: uppercase; flex: 1; max-width: 130px; display: flex; align-items: center; justify-content: center; }
         
-        #viewer { flex: 1; padding: 10px; display: flex; flex-direction: column; align-items: center; background: #1e1e1e; }
-        .pdf-page-wrapper { position: relative; background: white; margin-bottom: 50px; box-shadow: 0 5px 25px rgba(0,0,0,0.7); }
+        #viewer { flex: 1; padding: 10px; display: flex; flex-direction: column; align-items: center; background: #1e1e1e; overflow-y: auto; touch-action: pan-y; }
+        .pdf-page-wrapper { position: relative; background: white; margin-bottom: 50px; box-shadow: 0 5px 25px rgba(0,0,0,0.7); line-height: 0; }
         
-        /* Moldura de Assinatura */
         .sig-box { 
             position: absolute; width: 160px; border: 2px solid #3498db; 
             background: rgba(52,152,219,0.1); z-index: 1000; 
@@ -30,20 +29,19 @@
         
         .move-handle { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: #3498db; font-size: 32px; opacity: 0.6; pointer-events: none; }
 
-        /* Alças Externas */
         .handle { 
-            position: absolute; width: 48px; height: 48px; 
+            position: absolute; width: 50px; height: 50px; 
             background: #2980b9; color: white; border-radius: 50%; 
             display: flex; align-items: center; justify-content: center; 
-            font-size: 20px; border: 3px solid #fff; box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+            font-size: 22px; border: 3px solid #fff; box-shadow: 0 4px 15px rgba(0,0,0,0.5);
             z-index: 1100; touch-action: none !important;
         }
-        .tl { top: -55px; left: -55px; }
-        .tr { top: -55px; right: -55px; }
-        .bl { bottom: -55px; left: -55px; }
-        .br { bottom: -55px; right: -55px; }
+        .tl { top: -60px; left: -60px; }
+        .tr { top: -60px; right: -60px; }
+        .bl { bottom: -60px; left: -60px; }
+        .br { bottom: -60px; right: -60px; }
 
-        .rotator-btn { position: absolute; top: -110px; left: 50%; transform: translateX(-50%); background: #f39c12; padding: 10px 20px; border-radius: 25px; font-size: 12px; font-weight: bold; border: 2px solid white; z-index: 1200; white-space: nowrap; touch-action: none; }
+        .rotator-btn { position: absolute; top: -120px; left: 50%; transform: translateX(-50%); background: #f39c12; padding: 12px 24px; border-radius: 30px; font-size: 13px; font-weight: bold; border: 2px solid white; z-index: 1200; white-space: nowrap; touch-action: none; }
 
         #final-tools { position: fixed; bottom: 0; left: 0; width: 100%; display: none; flex-direction: row; justify-content: center; gap: 10px; background: rgba(0,0,0,0.9); padding: 15px; border-top: 1px solid #444; z-index: 3000; }
         #screen-sign { position: fixed; inset: 0; background: #000; z-index: 9999; display: none; flex-direction: column; }
@@ -116,7 +114,6 @@
                 `;
                 box.dataset.rotation = 0;
 
-                // LÓGICA DE MOVIMENTO UNIFICADA (Pointer Events)
                 const onPointerMove = (e) => {
                     if (e.target.className.includes('handle')) return;
                     e.preventDefault(); e.stopPropagation();
@@ -135,21 +132,36 @@
                     box.removeEventListener("pointermove", onPointerMove);
                 });
 
-                // REDIMENSIONAR (Pointer Events)
+                // REDIMENSIONAMENTO SUAVE (Multiplicador de Velocidade)
                 box.querySelectorAll('.handle').forEach(h => {
+                    let startX, startW, startL;
+                    const speedFactor = 0.5; // Reduz a velocidade pela metade para precisão
+
                     const onResize = (re) => {
                         re.preventDefault(); re.stopPropagation();
-                        const r = box.getBoundingClientRect();
+                        const deltaX = (re.clientX - startX) * speedFactor;
                         const pR = page.getBoundingClientRect();
-                        let newW = h.className.includes('tr') || h.className.includes('br') ? (re.clientX - r.left) : (r.right - re.clientX);
+                        
+                        let newW;
+                        if (h.className.includes('tr') || h.className.includes('br')) {
+                            newW = startW + deltaX;
+                        } else {
+                            newW = startW - deltaX;
+                            box.style.left = (startL + deltaX) + "px";
+                        }
+
                         if (newW > 40) {
                             box.style.width = newW + "px";
                             box.style.height = (newW / originalAspectRatio) + "px";
-                            if (h.className.includes('l')) box.style.left = (re.clientX - pR.left) + "px";
                         }
                     };
+
                     h.addEventListener("pointerdown", (he) => {
+                        he.preventDefault(); he.stopPropagation();
                         h.setPointerCapture(he.pointerId);
+                        startX = he.clientX;
+                        startW = box.offsetWidth;
+                        startL = parseFloat(box.style.left);
                         h.addEventListener("pointermove", onResize);
                     });
                     h.addEventListener("pointerup", (he) => {
